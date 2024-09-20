@@ -133,7 +133,7 @@ public class ProductExported
     public float Quantity { get; set; }
     
     [JsonProperty]
-    public bool IsStatic { get; set; }
+    public bool IsDynamic { get; set; }
     
     [JsonProperty]
     public string Skill { get; set; }
@@ -148,7 +148,7 @@ public class ProductExported
         if (craftingElement.Quantity is ModuleModifiedValue)
         {
             this.Quantity = craftingElement.Quantity.GetBaseValue;
-            this.IsStatic = false;
+            this.IsDynamic = true;
             
             var skillType = ((ModuleModifiedValue)craftingElement.Quantity).SkillType;
             this.Skill = skillType != null ? Item.Get(skillType).Name : "";
@@ -156,7 +156,7 @@ public class ProductExported
         else if (craftingElement.Quantity is MultiDynamicValue)
         {
             this.Quantity = craftingElement.Quantity.GetBaseValue;
-            this.IsStatic = false;
+            this.IsDynamic = true;
 
             var skillType = ((ModuleModifiedValue)((MultiDynamicValue)craftingElement.Quantity).Values[0]).SkillType;
             this.Skill = skillType != null ? Item.Get(skillType).Name : "";
@@ -166,7 +166,7 @@ public class ProductExported
         else
         {
             this.Quantity = craftingElement.Quantity.GetBaseValue;
-            this.IsStatic = true;
+            this.IsDynamic = false;
             this.Skill = "";
             this.LavishTalent = false;
         }
@@ -182,10 +182,44 @@ public class IngredientExported
     [JsonProperty]
     public float Quantity { get; set; }
     
-    public IngredientExported(IngredientElement element)
+    [JsonProperty]
+    public bool IsDynamic { get; set; }
+    
+    [JsonProperty]
+    public string Skill { get; set; }
+    
+    [JsonProperty]
+    public bool LavishTalent { get; set; }
+    
+    public IngredientExported(IngredientElement ingredientElement)
     {
-        this.ItemOrTag = element.InnerName;
-        this.Quantity = element.Quantity.GetBaseValue;
+        this.ItemOrTag = ingredientElement.InnerName;
+        
+        if (ingredientElement.Quantity is ModuleModifiedValue moduleModifiedQuantity)
+        {
+            this.Quantity = ingredientElement.Quantity.GetBaseValue;
+            this.IsDynamic = true;
+        
+            var skillType = moduleModifiedQuantity.SkillType;
+            this.Skill = skillType != null && skillType != typeof(Skill) ? Item.Get(skillType).Name : "";
+        } 
+        else if (ingredientElement.Quantity is MultiDynamicValue multiDynamicQuantity)
+        {
+            this.Quantity = ingredientElement.Quantity.GetBaseValue;
+            this.IsDynamic = true;
+
+            var skillType = ((ModuleModifiedValue)multiDynamicQuantity.Values[0]).SkillType;
+            this.Skill = skillType != null ? Item.Get(skillType).Name : "";
+
+            this.LavishTalent = true;
+        }
+        else
+        {
+            this.Quantity = ingredientElement.Quantity.GetBaseValue;
+            this.IsDynamic = false;
+            this.Skill = "";
+            this.LavishTalent = false;
+        }
     }
 }
 
