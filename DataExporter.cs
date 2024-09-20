@@ -22,11 +22,7 @@ public class DataExporter
             
         foreach (var recipe in RecipeManager.AllRecipes)
         {
-            recipeList.Add(JsonConvert.SerializeObject(
-                new ExportedRecipe(
-                    recipe
-                )
-            ));
+            recipeList.Add(JsonConvert.SerializeObject(new ExportedRecipe(recipe)));
         }
         
         foreach (var tag in TagManager.AllTags)
@@ -50,11 +46,11 @@ public class DataExporter
         }
 
         File.WriteAllLines("exported_data.json", new [] { "{\n" +
-                                                                "recipes: " + string.Join(',', recipeList) + ",\n" +
-                                                                "itemTagAssoc: " +  string.Join(',', itemTagAssoc) + ",\n" +
-                                                                "pluginModules: " +  string.Join(',', pluginModules) + ",\n" +
-                                                                "craftingTables: " +  string.Join(',', craftingTables) + ",\n" +
-                                                                "skills: " +  string.Join(',', skills) + "\n" +
+                                                                "\"recipes\": [" + string.Join(',', recipeList) + "],\n" +
+                                                                "\"itemTagAssoc\": [" +  string.Join(',', itemTagAssoc) + "],\n" +
+                                                                "\"pluginModules\": [" +  string.Join(',', pluginModules) + "],\n" +
+                                                                "\"craftingTables\": [" +  string.Join(',', craftingTables) + "],\n" +
+                                                                "\"skills\": [" +  string.Join(',', skills) + "]\n" +
                                                                 "}" });
     }
 }
@@ -103,7 +99,7 @@ public class ExportedRecipe
 
         var skill = recipe.Family.RequiredSkills.FirstOrDefault();
 
-        this.RequiredSkill = skill != null ? skill.SkillType.ToString() : "";
+        this.RequiredSkill = skill != null ? Item.Get(skill.SkillType).Name : "";
         this.RequiredSkillLevel = skill != null ? skill.Level : 0;
 
         this.IsBlueprint = recipe.RequiresStrangeBlueprint;
@@ -111,7 +107,7 @@ public class ExportedRecipe
 
         this.Labor = recipe.Family.Labor;
 
-        this.CraftingTable = recipe.Family.CraftingTable.Type.ToString();
+        this.CraftingTable = recipe.Family.CraftingTable.Name;
 
         this.Ingredients = new List<IngredientExported>();
         foreach (var ingredient in recipe.Ingredients)
@@ -147,7 +143,7 @@ public class ProductExported
     
     public ProductExported(CraftingElement craftingElement)
     {
-        this.ItemOrTag = craftingElement.Item.ToString();
+        this.ItemOrTag = craftingElement.Item.Name;
 
         if (craftingElement.Quantity is ModuleModifiedValue)
         {
@@ -155,7 +151,7 @@ public class ProductExported
             this.IsStatic = false;
             
             var skillType = ((ModuleModifiedValue)craftingElement.Quantity).SkillType;
-            this.Skill = skillType != null ? skillType.ToString() : "";
+            this.Skill = skillType != null ? Item.Get(skillType).Name : "";
         } 
         else if (craftingElement.Quantity is MultiDynamicValue)
         {
@@ -163,7 +159,7 @@ public class ProductExported
             this.IsStatic = false;
 
             var skillType = ((ModuleModifiedValue)((MultiDynamicValue)craftingElement.Quantity).Values[0]).SkillType;
-            this.Skill = skillType != null ? skillType.ToString() : "";
+            this.Skill = skillType != null ? Item.Get(skillType).Name : "";
             
             this.LavishTalent = true;
         }
@@ -220,8 +216,8 @@ public class PluginModuleExported
         
     public PluginModuleExported(EfficiencyModule module)
     {
-        this.Name = module.Type.ToString();
-        this.Percent = module.GenericMultiplier;
+        this.Name = module.Name;
+        this.Percent = module.SkillType != null ? module.SkillMultiplier : module.GenericMultiplier;
     }
 }
 
@@ -248,7 +244,7 @@ public class CraftingTableExported
         
     public CraftingTableExported(Item craftingTable)
     {
-        this.Name = craftingTable.Type.ToString();
+        this.Name = craftingTable.Name;
         
         var stackables = ItemAttribute.Get<AllowPluginModulesAttribute>(craftingTable.Type)?.GetStackables();
         if (stackables != null)
@@ -259,7 +255,7 @@ public class CraftingTableExported
             {
                 if (!(stackable is Tag tag))
                 {
-                    modules.Add(stackable.GetType().ToString());
+                    modules.Add(Item.Get(stackable.GetType()).Name);
                     continue;
                 }
 
@@ -267,7 +263,7 @@ public class CraftingTableExported
                     continue;
 
                 foreach (var moduleType in moduleTypes)
-                    modules.Add(moduleType.ToString());
+                    modules.Add(Item.Get(moduleType).Name);
             }
 
             this.CraftingTablePluginModules = modules.ToArray();
