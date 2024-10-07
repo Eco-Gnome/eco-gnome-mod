@@ -1,16 +1,13 @@
-﻿using Eco.Core.Plugins;
-using Eco.Gameplay.Components;
-using Eco.Gameplay.DynamicValues;
+﻿using Eco.Gameplay.DynamicValues;
 using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
 using Eco.Gameplay.Modules;
 using Eco.Gameplay.Skills;
-using NetFabric.Hyperlinq;
 using Newtonsoft.Json;
 
 namespace CavRnMods.DataExporter;
 
-public class DataExporter
+public static class DataExporter
 {
     public static void ExportAll()
     {
@@ -45,13 +42,18 @@ public class DataExporter
             skills.Add(JsonConvert.SerializeObject(new SkillExported(skill)));
         }
 
-        File.WriteAllLines("exported_data.json", new [] { "{\n" +
-                                                                "\"recipes\": [" + string.Join(',', recipeList) + "],\n" +
-                                                                "\"itemTagAssoc\": [" +  string.Join(',', itemTagAssoc) + "],\n" +
-                                                                "\"pluginModules\": [" +  string.Join(',', pluginModules) + "],\n" +
-                                                                "\"craftingTables\": [" +  string.Join(',', craftingTables) + "],\n" +
-                                                                "\"skills\": [" +  string.Join(',', skills) + "]\n" +
-                                                                "}" });
+        File.WriteAllLines("exported_data.json", new []
+        {
+            $$"""
+              {
+                "recipes": [{{string.Join(',', recipeList)}}],
+                "itemTagAssoc": [{{string.Join(',', itemTagAssoc)}}],
+                "pluginModules": [{{string.Join(',', pluginModules)}}],
+                "craftingTables": [{{string.Join(',', craftingTables)}}],
+                "skills": [{{string.Join(',', skills)}}]
+              }
+              """
+        });
     }
 }
 
@@ -128,19 +130,19 @@ public class ProductExported
 {
     [JsonProperty]
     public string ItemOrTag { get; set; }
-    
+
     [JsonProperty]
     public float Quantity { get; set; }
-    
+
     [JsonProperty]
     public bool IsDynamic { get; set; }
-    
+
     [JsonProperty]
     public string Skill { get; set; }
-    
+
     [JsonProperty]
     public bool LavishTalent { get; set; }
-    
+
     public ProductExported(CraftingElement craftingElement)
     {
         this.ItemOrTag = craftingElement.Item.Name;
@@ -149,7 +151,7 @@ public class ProductExported
         {
             this.Quantity = craftingElement.Quantity.GetBaseValue;
             this.IsDynamic = true;
-            
+
             var skillType = ((ModuleModifiedValue)craftingElement.Quantity).SkillType;
             this.Skill = skillType != null ? Item.Get(skillType).Name : "";
         } 
@@ -160,7 +162,7 @@ public class ProductExported
 
             var skillType = ((ModuleModifiedValue)((MultiDynamicValue)craftingElement.Quantity).Values[0]).SkillType;
             this.Skill = skillType != null ? Item.Get(skillType).Name : "";
-            
+
             this.LavishTalent = true;
         }
         else
@@ -202,7 +204,7 @@ public class IngredientExported
         
             var skillType = moduleModifiedQuantity.SkillType;
             this.Skill = skillType != null && skillType != typeof(Skill) ? Item.Get(skillType).Name : "";
-        } 
+        }
         else if (ingredientElement.Quantity is MultiDynamicValue multiDynamicQuantity)
         {
             this.Quantity = ingredientElement.Quantity.GetBaseValue;
@@ -260,10 +262,14 @@ public class SkillExported
 {
     [JsonProperty]
     public string Name { get; set; }
+    
+    [JsonProperty]
+    public string? Profession { get; set; }
         
     public SkillExported(Skill skill)
     {
         this.Name = skill.Name;
+        this.Profession = skill.Prerequisites.FirstOrDefault()?.SkillType.Name;
     }
 }
 
