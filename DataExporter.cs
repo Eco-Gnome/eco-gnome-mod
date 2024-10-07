@@ -151,6 +151,9 @@ public class ProductExported
     public string ItemOrTag { get; set; }
     
     [JsonProperty]
+    public bool IsTag { get; set; }
+    
+    [JsonProperty]
     public Dictionary<string, string> LocalizedItemOrTag { get; set; }
 
     [JsonProperty]
@@ -168,6 +171,7 @@ public class ProductExported
     public ProductExported(CraftingElement craftingElement)
     {
         this.ItemOrTag = craftingElement.Item.Name;
+        this.IsTag = false;
         this.LocalizedItemOrTag = DataExporter.GenerateLocalization(craftingElement.Item.DisplayName);
 
         if (craftingElement.Quantity is ModuleModifiedValue)
@@ -205,6 +209,9 @@ public class IngredientExported
     public string ItemOrTag { get; set; }
     
     [JsonProperty]
+    public bool IsTag { get; set; }
+    
+    [JsonProperty]
     public Dictionary<string, string> LocalizedItemOrTag { get; set; }
     
     [JsonProperty]
@@ -222,6 +229,7 @@ public class IngredientExported
     public IngredientExported(IngredientElement ingredientElement)
     {
         this.ItemOrTag = ingredientElement.Tag?.Name ?? ingredientElement.Item.Name;
+        this.IsTag = ingredientElement.Tag is not null;
         this.LocalizedItemOrTag = DataExporter.GenerateLocalization(ingredientElement.Tag?.DisplayName ?? ingredientElement.Item.DisplayName);
 
         if (ingredientElement.Quantity is ModuleModifiedValue moduleModifiedQuantity)
