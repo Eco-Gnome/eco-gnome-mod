@@ -3,6 +3,7 @@ using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
 using Eco.Gameplay.Modules;
 using Eco.Gameplay.Skills;
+using Eco.Shared.Localization;
 using Newtonsoft.Json;
 
 namespace CavRnMods.DataExporter;
@@ -55,6 +56,20 @@ public static class DataExporter
               """
         });
     }
+    
+    public static Dictionary<string, string> GenerateLocalization(string name)
+    {
+        Dictionary<string, string> localizedString = new Dictionary<string, string>();
+
+        foreach (var keyValue in SupportedLanguageUtils.DictToCultureLangCode)
+        {
+            if (localizedString.ContainsKey(keyValue.Value)) continue;
+            
+            localizedString.Add(keyValue.Value, Localizer.LocalizeString(name, keyValue.Key));
+        }
+
+        return localizedString;
+    }
 }
 
 [JsonObject(MemberSerialization.OptIn)]
@@ -62,6 +77,9 @@ public class ExportedRecipe
 {
     [JsonProperty]
     public string Name { get; set; }
+    
+    [JsonProperty]
+    public Dictionary<string, string> LocalizedName { get; set; }
     
     [JsonProperty]
     public string FamilyName { get; set; }
@@ -96,6 +114,7 @@ public class ExportedRecipe
     public ExportedRecipe(Recipe recipe)
     {
         this.Name = recipe.Name;
+        this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName);
         this.FamilyName = recipe.Family.RecipeName;
         this.CraftMinutes = recipe.Family.CraftMinutes.GetBaseValue;
 
@@ -130,6 +149,9 @@ public class ProductExported
 {
     [JsonProperty]
     public string ItemOrTag { get; set; }
+    
+    [JsonProperty]
+    public Dictionary<string, string> LocalizedItemOrTag { get; set; }
 
     [JsonProperty]
     public float Quantity { get; set; }
@@ -146,6 +168,7 @@ public class ProductExported
     public ProductExported(CraftingElement craftingElement)
     {
         this.ItemOrTag = craftingElement.Item.Name;
+        this.LocalizedItemOrTag = DataExporter.GenerateLocalization(craftingElement.Item.DisplayName);
 
         if (craftingElement.Quantity is ModuleModifiedValue)
         {
@@ -182,6 +205,9 @@ public class IngredientExported
     public string ItemOrTag { get; set; }
     
     [JsonProperty]
+    public Dictionary<string, string> LocalizedItemOrTag { get; set; }
+    
+    [JsonProperty]
     public float Quantity { get; set; }
     
     [JsonProperty]
@@ -195,8 +221,9 @@ public class IngredientExported
     
     public IngredientExported(IngredientElement ingredientElement)
     {
-        this.ItemOrTag = ingredientElement.InnerName;
-        
+        this.ItemOrTag = ingredientElement.Tag?.Name ?? ingredientElement.Item.Name;
+        this.LocalizedItemOrTag = DataExporter.GenerateLocalization(ingredientElement.Tag?.DisplayName ?? ingredientElement.Item.DisplayName);
+
         if (ingredientElement.Quantity is ModuleModifiedValue moduleModifiedQuantity)
         {
             this.Quantity = ingredientElement.Quantity.GetBaseValue;
@@ -230,10 +257,10 @@ public class ItemTagAssocExported
 {
     [JsonProperty]
     public string Tag { get; set; }
-        
+    
     [JsonProperty]
     public string[] Types { get; set; }
-        
+    
     public ItemTagAssocExported(Tag tag)
     {
         this.Tag = tag.Name;
@@ -246,6 +273,9 @@ public class PluginModuleExported
 {
     [JsonProperty]
     public string Name { get; set; }
+    
+    [JsonProperty]
+    public Dictionary<string, string> LocalizedName { get; set; }
         
     [JsonProperty]
     public float Percent { get; set; }
@@ -253,6 +283,7 @@ public class PluginModuleExported
     public PluginModuleExported(EfficiencyModule module)
     {
         this.Name = module.Name;
+        this.LocalizedName = DataExporter.GenerateLocalization(module.DisplayName);
         this.Percent = module.SkillType != null ? module.SkillMultiplier : module.GenericMultiplier;
     }
 }
@@ -264,11 +295,15 @@ public class SkillExported
     public string Name { get; set; }
     
     [JsonProperty]
+    public Dictionary<string, string> LocalizedName { get; set; }
+    
+    [JsonProperty]
     public string? Profession { get; set; }
         
     public SkillExported(Skill skill)
     {
         this.Name = skill.Name;
+        this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName);
         this.Profession = skill.Prerequisites.FirstOrDefault()?.SkillType.Name;
     }
 }
@@ -278,6 +313,9 @@ public class CraftingTableExported
 {
     [JsonProperty]
     public string Name { get; set; }
+    
+    [JsonProperty]
+    public Dictionary<string, string> LocalizedName { get; set; }
         
     [JsonProperty]
     public string[] CraftingTablePluginModules { get; set; }
@@ -285,7 +323,8 @@ public class CraftingTableExported
     public CraftingTableExported(Item craftingTable)
     {
         this.Name = craftingTable.Name;
-        
+        this.LocalizedName = DataExporter.GenerateLocalization(craftingTable.DisplayName);
+
         var stackables = ItemAttribute.Get<AllowPluginModulesAttribute>(craftingTable.Type)?.GetStackables();
         if (stackables != null)
         {
