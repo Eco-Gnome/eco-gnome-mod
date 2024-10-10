@@ -307,12 +307,16 @@ public class SkillExported
     
     [JsonProperty]
     public string? Profession { get; set; }
+    
+    [JsonProperty]
+    public float[] LaborReducePercent { get; set; }
         
     public SkillExported(Skill skill)
     {
         this.Name = skill.Name;
         this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName);
         this.Profession = skill.Prerequisites.FirstOrDefault()?.SkillType.Name;
+        this.LaborReducePercent = skill.MultiStrategy.Factors;
     }
 }
 
