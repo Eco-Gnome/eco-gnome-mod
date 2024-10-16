@@ -9,6 +9,7 @@
     <ItemGroup>
       <ProjectReference Include="..\Eco.Core\Eco.Core.csproj" />
       <ProjectReference Include="..\Eco.Gameplay\Eco.Gameplay.csproj" />
+      <ProjectReference Include="..\Eco.Mods\Eco.Mods.csproj" />
     </ItemGroup>
 
 </Project>

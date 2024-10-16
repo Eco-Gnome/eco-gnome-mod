@@ -1,4 +1,5 @@
-﻿using Eco.Gameplay.DynamicValues;
+﻿using Eco.Core.Utils;
+using Eco.Gameplay.DynamicValues;
 using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
 using Eco.Gameplay.Modules;
@@ -10,61 +11,41 @@ namespace CavRnMods.DataExporter;
 
 public static class DataExporter
 {
+    public static readonly TalentGroup[] AllTalentGroups = typeof(TalentGroup).InstancesOfCreatableTypesParallel<TalentGroup>().ToArray();
+    public static readonly List<Item> CraftingTables = RecipeManager.AllRecipes.Select(r => r.Family.CraftingTable).Distinct().ToList();
+
     public static void ExportAll()
     {
-        List<string> recipeList = new List<string>();
-        List<string> itemTagAssoc = new List<string>();
-        List<string> pluginModules = new List<string>();
-        List<string> craftingTables = new List<string>();
-        List<string> skills = new List<string>();
-            
-        foreach (var recipe in RecipeManager.AllRecipes)
-        {
-            recipeList.Add(JsonConvert.SerializeObject(new ExportedRecipe(recipe)));
-        }
-        
-        foreach (var tag in TagManager.AllTags)
-        {
-            itemTagAssoc.Add(JsonConvert.SerializeObject(new ItemTagAssocExported(tag)));
-        }
-        
-        foreach (var item in Item.AllItemsExceptHidden.OfType<EfficiencyModule>())
-        {
-            pluginModules.Add(JsonConvert.SerializeObject(new PluginModuleExported(item)));
-        }
-        
-        foreach (var craftingTable in RecipeManager.AllRecipes.Select(r => r.Family.CraftingTable).Distinct())
-        {
-            craftingTables.Add(JsonConvert.SerializeObject(new CraftingTableExported(craftingTable)));
-        }
-        
-        foreach (var skill in Skill.AllSkills)
-        {
-            skills.Add(JsonConvert.SerializeObject(new SkillExported(skill)));
-        }
+        var skills = Skill.AllSkills.Select(skill => JsonConvert.SerializeObject(new SkillExported(skill))).ToList();
+        var items = Item.AllItemsExceptHidden.Select(item => JsonConvert.SerializeObject(new ItemExported(item))).ToList();
+        var tags = (
+            from tag in TagManager.AllTags
+            where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
+            select JsonConvert.SerializeObject(new TagExported(tag))
+        ).ToList();
+        var recipes = RecipeManager.AllRecipes.Select(recipe => JsonConvert.SerializeObject(new ExportedRecipe(recipe))).ToList();
 
-        File.WriteAllLines("exported_data.json", new []
+        File.WriteAllLines("exported_data.json", new[]
         {
             $$"""
               {
-                "recipes": [{{string.Join(',', recipeList)}}],
-                "itemTagAssoc": [{{string.Join(',', itemTagAssoc)}}],
-                "pluginModules": [{{string.Join(',', pluginModules)}}],
-                "craftingTables": [{{string.Join(',', craftingTables)}}],
-                "skills": [{{string.Join(',', skills)}}]
+                "Skills": [{{string.Join(',', skills)}}]
+                "Items": [{{string.Join(',', items)}}],
+                "Tags": [{{string.Join(',', tags)}}],
+                "Recipes": [{{string.Join(',', recipes)}}]
               }
               """
         });
     }
-    
+
     public static Dictionary<string, string> GenerateLocalization(string name)
     {
-        Dictionary<string, string> localizedString = new Dictionary<string, string>();
+        var localizedString = new Dictionary<string, string>();
 
         foreach (var keyValue in SupportedLanguageUtils.DictToCultureLangCode)
         {
             if (localizedString.ContainsKey(keyValue.Value)) continue;
-            
+
             localizedString.Add(keyValue.Value, Localizer.LocalizeString(name, keyValue.Key));
         }
 
@@ -75,41 +56,29 @@ public static class DataExporter
 [JsonObject(MemberSerialization.OptIn)]
 public class ExportedRecipe
 {
-    [JsonProperty]
-    public string Name { get; set; }
-    
-    [JsonProperty]
-    public Dictionary<string, string> LocalizedName { get; set; }
-    
-    [JsonProperty]
-    public string FamilyName { get; set; }
-    
-    [JsonProperty]
-    public float CraftMinutes { get; set; }
-    
-    [JsonProperty]
-    public string RequiredSkill { get; set; }
-    
-    [JsonProperty]
-    public int RequiredSkillLevel { get; set; }
-    
-    [JsonProperty]
-    public bool IsBlueprint { get; set; }
-    
-    [JsonProperty]
-    public bool IsDefault { get; set; }
-    
-    [JsonProperty]
-    public float Labor { get; set; }
-    
-    [JsonProperty]
-    public String CraftingTable { get; set; }
-    
-    [JsonProperty]
-    public List<IngredientExported> Ingredients { get; set; }
-    
-    [JsonProperty]
-    public List<ProductExported> Products { get; set; }
+    [JsonProperty] public string Name { get; set; }
+
+    [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
+
+    [JsonProperty] public string FamilyName { get; set; }
+
+    [JsonProperty] public float CraftMinutes { get; set; }
+
+    [JsonProperty] public string RequiredSkill { get; set; }
+
+    [JsonProperty] public int RequiredSkillLevel { get; set; }
+
+    [JsonProperty] public bool IsBlueprint { get; set; }
+
+    [JsonProperty] public bool IsDefault { get; set; }
+
+    [JsonProperty] public float Labor { get; set; }
+
+    [JsonProperty] public String CraftingTable { get; set; }
+
+    [JsonProperty] public List<IngredientExported> Ingredients { get; set; }
+
+    [JsonProperty] public List<ProductExported> Products { get; set; }
 
     public ExportedRecipe(Recipe recipe)
     {
@@ -121,7 +90,7 @@ public class ExportedRecipe
         var skill = recipe.Family.RequiredSkills.FirstOrDefault();
 
         this.RequiredSkill = skill != null ? Item.Get(skill.SkillType).Name : "";
-        this.RequiredSkillLevel = skill != null ? skill.Level : 0;
+        this.RequiredSkillLevel = skill?.Level ?? 0;
 
         this.IsBlueprint = recipe.RequiresStrangeBlueprint;
         this.IsDefault = recipe == recipe.Family.DefaultRecipe;
@@ -147,47 +116,34 @@ public class ExportedRecipe
 [JsonObject(MemberSerialization.OptIn)]
 public class ProductExported
 {
-    [JsonProperty]
-    public string ItemOrTag { get; set; }
-    
-    [JsonProperty]
-    public bool IsTag { get; set; }
-    
-    [JsonProperty]
-    public Dictionary<string, string> LocalizedItemOrTag { get; set; }
+    [JsonProperty] public string ItemOrTag { get; set; }
 
-    [JsonProperty]
-    public float Quantity { get; set; }
+    [JsonProperty] public float Quantity { get; set; }
 
-    [JsonProperty]
-    public bool IsDynamic { get; set; }
+    [JsonProperty] public bool IsDynamic { get; set; }
 
-    [JsonProperty]
-    public string Skill { get; set; }
+    [JsonProperty] public string Skill { get; set; }
 
-    [JsonProperty]
-    public bool LavishTalent { get; set; }
+    [JsonProperty] public bool LavishTalent { get; set; }
 
     public ProductExported(CraftingElement craftingElement)
     {
         this.ItemOrTag = craftingElement.Item.Name;
-        this.IsTag = false;
-        this.LocalizedItemOrTag = DataExporter.GenerateLocalization(craftingElement.Item.DisplayName);
 
-        if (craftingElement.Quantity is ModuleModifiedValue)
+        if (craftingElement.Quantity is ModuleModifiedValue moduleModifiedValue)
         {
             this.Quantity = craftingElement.Quantity.GetBaseValue;
             this.IsDynamic = true;
 
-            var skillType = ((ModuleModifiedValue)craftingElement.Quantity).SkillType;
+            var skillType = moduleModifiedValue.SkillType;
             this.Skill = skillType != null ? Item.Get(skillType).Name : "";
-        } 
-        else if (craftingElement.Quantity is MultiDynamicValue)
+        }
+        else if (craftingElement.Quantity is MultiDynamicValue multiDynamicValue)
         {
             this.Quantity = craftingElement.Quantity.GetBaseValue;
             this.IsDynamic = true;
 
-            var skillType = ((ModuleModifiedValue)((MultiDynamicValue)craftingElement.Quantity).Values[0]).SkillType;
+            var skillType = ((ModuleModifiedValue)multiDynamicValue.Values[0]).SkillType;
             this.Skill = skillType != null ? Item.Get(skillType).Name : "";
 
             this.LavishTalent = true;
@@ -205,38 +161,25 @@ public class ProductExported
 [JsonObject(MemberSerialization.OptIn)]
 public class IngredientExported
 {
-    [JsonProperty]
-    public string ItemOrTag { get; set; }
-    
-    [JsonProperty]
-    public bool IsTag { get; set; }
-    
-    [JsonProperty]
-    public Dictionary<string, string> LocalizedItemOrTag { get; set; }
-    
-    [JsonProperty]
-    public float Quantity { get; set; }
-    
-    [JsonProperty]
-    public bool IsDynamic { get; set; }
-    
-    [JsonProperty]
-    public string Skill { get; set; }
-    
-    [JsonProperty]
-    public bool LavishTalent { get; set; }
-    
+    [JsonProperty] public string ItemOrTag { get; set; }
+
+    [JsonProperty] public float Quantity { get; set; }
+
+    [JsonProperty] public bool IsDynamic { get; set; }
+
+    [JsonProperty] public string Skill { get; set; }
+
+    [JsonProperty] public bool LavishTalent { get; set; }
+
     public IngredientExported(IngredientElement ingredientElement)
     {
         this.ItemOrTag = ingredientElement.Tag?.Name ?? ingredientElement.Item.Name;
-        this.IsTag = ingredientElement.Tag is not null;
-        this.LocalizedItemOrTag = DataExporter.GenerateLocalization(ingredientElement.Tag?.DisplayName ?? ingredientElement.Item.DisplayName);
 
         if (ingredientElement.Quantity is ModuleModifiedValue moduleModifiedQuantity)
         {
             this.Quantity = ingredientElement.Quantity.GetBaseValue;
             this.IsDynamic = true;
-        
+
             var skillType = moduleModifiedQuantity.SkillType;
             this.Skill = skillType != null && skillType != typeof(Skill) ? Item.Get(skillType).Name : "";
         }
@@ -261,107 +204,104 @@ public class IngredientExported
 }
 
 [JsonObject(MemberSerialization.OptIn)]
-public class ItemTagAssocExported
+public class ItemExported
 {
-    [JsonProperty]
-    public string Tag { get; set; }
-    
-    [JsonProperty]
-    public string[] Types { get; set; }
-    
-    public ItemTagAssocExported(Tag tag)
+    [JsonProperty] public string Name { get; set; }
+
+    [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
+
+    [JsonProperty] public bool? IsPluginModule { get; set; }
+
+    [JsonProperty] public float? PluginModulePercent { get; set; }
+
+    [JsonProperty] public bool? IsCraftingTable { get; set; }
+
+    [JsonProperty] public string[]? CraftingTablePluginModules { get; set; }
+
+    public ItemExported(Item item)
     {
-        this.Tag = tag.Name;
-        this.Types = Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).ToArray();
+        this.Name = item.Name;
+        this.LocalizedName = DataExporter.GenerateLocalization(item.DisplayName);
+
+        if (item is EfficiencyModule efficiencyModule)
+        {
+            this.IsPluginModule = true;
+            this.PluginModulePercent = efficiencyModule.SkillType != null ? efficiencyModule.SkillMultiplier : efficiencyModule.GenericMultiplier;
+        }
+
+        if (DataExporter.CraftingTables.Contains(item))
+        {
+            this.IsCraftingTable = true;
+
+            var stackables = ItemAttribute.Get<AllowPluginModulesAttribute>(item.Type)?.GetStackables();
+
+            if (stackables != null)
+            {
+                List<string> modules = new List<string>();
+
+                foreach (var stackable in stackables)
+                {
+                    if (!(stackable is Tag tag))
+                    {
+                        modules.Add(Item.Get(stackable.GetType()).Name);
+                        continue;
+                    }
+
+                    if (!TagManager.TagToTypes.TryGetValue(tag, out var moduleTypes))
+                        continue;
+
+                    foreach (var moduleType in moduleTypes)
+                        modules.Add(Item.Get(moduleType).Name);
+                }
+
+                this.CraftingTablePluginModules = modules.ToArray();
+            }
+        }
     }
 }
 
 [JsonObject(MemberSerialization.OptIn)]
-public class PluginModuleExported
+public class TagExported
 {
-    [JsonProperty]
-    public string Name { get; set; }
-    
-    [JsonProperty]
-    public Dictionary<string, string> LocalizedName { get; set; }
-        
-    [JsonProperty]
-    public float Percent { get; set; }
-        
-    public PluginModuleExported(EfficiencyModule module)
+    [JsonProperty] public string Name { get; set; }
+
+    [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
+
+    [JsonProperty] public string[] AssociatedItems { get; set; }
+
+    public TagExported(Tag tag)
     {
-        this.Name = module.Name;
-        this.LocalizedName = DataExporter.GenerateLocalization(module.DisplayName);
-        this.Percent = module.SkillType != null ? module.SkillMultiplier : module.GenericMultiplier;
+        this.Name = tag.Name;
+        this.LocalizedName = DataExporter.GenerateLocalization(tag.DisplayName);
+        this.AssociatedItems = Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).ToArray();
     }
 }
 
 [JsonObject(MemberSerialization.OptIn)]
 public class SkillExported
 {
-    [JsonProperty]
-    public string Name { get; set; }
-    
-    [JsonProperty]
-    public Dictionary<string, string> LocalizedName { get; set; }
-    
-    [JsonProperty]
-    public string? Profession { get; set; }
-    
-    [JsonProperty]
-    public float[] LaborReducePercent { get; set; }
-        
+    [JsonProperty] public string Name { get; set; }
+
+    [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
+
+    [JsonProperty] public string? Profession { get; set; }
+
+    [JsonProperty] public float[] LaborReducePercent { get; set; }
+
+    [JsonProperty] public float? LavishTalentValue { get; set; }
+
     public SkillExported(Skill skill)
     {
         this.Name = skill.Name;
         this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName);
         this.Profession = skill.Prerequisites.FirstOrDefault()?.SkillType.Name;
         this.LaborReducePercent = skill.MultiStrategy.Factors;
-    }
-}
 
-[JsonObject(MemberSerialization.OptIn)]
-public class CraftingTableExported
-{
-    [JsonProperty]
-    public string Name { get; set; }
-    
-    [JsonProperty]
-    public Dictionary<string, string> LocalizedName { get; set; }
-        
-    [JsonProperty]
-    public string[] CraftingTablePluginModules { get; set; }
-        
-    public CraftingTableExported(Item craftingTable)
-    {
-        this.Name = craftingTable.Name;
-        this.LocalizedName = DataExporter.GenerateLocalization(craftingTable.DisplayName);
+        var lavishTalentGroup = DataExporter.AllTalentGroups.FirstOrDefault(tg => tg.OwningSkill == skill.Type);
 
-        var stackables = ItemAttribute.Get<AllowPluginModulesAttribute>(craftingTable.Type)?.GetStackables();
-        if (stackables != null)
+        if (lavishTalentGroup is not null)
         {
-            List<string> modules = new List<string>();
-            
-            foreach (var stackable in stackables)
-            {
-                if (!(stackable is Tag tag))
-                {
-                    modules.Add(Item.Get(stackable.GetType()).Name);
-                    continue;
-                }
-
-                if (!TagManager.TagToTypes.TryGetValue(tag, out var moduleTypes))
-                    continue;
-
-                foreach (var moduleType in moduleTypes)
-                    modules.Add(Item.Get(moduleType).Name);
-            }
-
-            this.CraftingTablePluginModules = modules.ToArray();
-        }
-        else
-        {
-            this.CraftingTablePluginModules = Array.Empty<string>();
+            this.LavishTalentValue = TalentManager.AllTalents.FirstOrDefault(t => t.GetType() == lavishTalentGroup.Talents[0])?.Value;
         }
     }
 }
