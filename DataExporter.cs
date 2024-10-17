@@ -17,14 +17,20 @@ public static class DataExporter
 
     public static void ExportAll()
     {
-        var skills = Skill.AllSkills.Select(skill => JsonConvert.SerializeObject(new SkillExported(skill))).ToList();
-        var items = Item.AllItemsExceptHidden.Select(item => JsonConvert.SerializeObject(new ItemExported(item))).ToList();
+        var options = new JsonSerializerSettings
+        {
+            NullValueHandling = NullValueHandling.Ignore,
+            Formatting = Formatting.Indented
+        };
+
+        var skills = Skill.AllSkills.Select(skill => JsonConvert.SerializeObject(new SkillExported(skill), options)).ToList();
+        var items = Item.AllItemsExceptHidden.Select(item => JsonConvert.SerializeObject(new ItemExported(item), options)).ToList();
         var tags = (
             from tag in TagManager.AllTags
             where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
-            select JsonConvert.SerializeObject(new TagExported(tag))
+            select JsonConvert.SerializeObject(new TagExported(tag), options)
         ).ToList();
-        var recipes = RecipeManager.AllRecipes.Select(recipe => JsonConvert.SerializeObject(new ExportedRecipe(recipe))).ToList();
+        var recipes = RecipeManager.AllRecipes.Select(recipe => JsonConvert.SerializeObject(new ExportedRecipe(recipe), options)).ToList();
 
         File.WriteAllLines("exported_data.json", new[]
         {
