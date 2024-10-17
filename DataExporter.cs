@@ -4,6 +4,7 @@ using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
 using Eco.Gameplay.Modules;
 using Eco.Gameplay.Skills;
+using Eco.Mods.TechTree;
 using Eco.Shared.Localization;
 using Newtonsoft.Json;
 
@@ -297,7 +298,7 @@ public class SkillExported
         this.Profession = skill.Prerequisites.FirstOrDefault()?.SkillType.Name;
         this.LaborReducePercent = skill.MultiStrategy.Factors;
 
-        var lavishTalentGroup = DataExporter.AllTalentGroups.FirstOrDefault(tg => tg.OwningSkill == skill.Type);
+        var lavishTalentGroup = DataExporter.AllTalentGroups.FirstOrDefault(tg => tg.OwningSkill == skill.Type && tg.Type.ToString().Contains("LavishWorkspace"));
 
         if (lavishTalentGroup is not null)
         {
