@@ -23,26 +23,18 @@ public static class DataExporter
             Formatting = Formatting.Indented
         };
 
-        var skills = Skill.AllSkills.Select(skill => JsonConvert.SerializeObject(new SkillExported(skill), options)).ToList();
-        var items = Item.AllItemsExceptHidden.Select(item => JsonConvert.SerializeObject(new ItemExported(item), options)).ToList();
-        var tags = (
-            from tag in TagManager.AllTags
-            where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
-            select JsonConvert.SerializeObject(new TagExported(tag), options)
-        ).ToList();
-        var recipes = RecipeManager.AllRecipes.Select(recipe => JsonConvert.SerializeObject(new ExportedRecipe(recipe), options)).ToList();
+        var data = new ExportedData(
+            Skill.AllSkills.Select(skill => new SkillExported(skill)).ToList(),
+            Item.AllItemsExceptHidden.Select(item => new ItemExported(item)).ToList(),
+            (
+                from tag in TagManager.AllTags
+                where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
+                select new TagExported(tag)
+            ).ToList(),
+            RecipeManager.AllRecipes.Select(recipe => new RecipeExported(recipe)).ToList()
+        );
 
-        File.WriteAllLines("exported_data.json", new[]
-        {
-            $$"""
-              {
-                "Skills": [{{string.Join(',', skills)}}]
-                "Items": [{{string.Join(',', items)}}],
-                "Tags": [{{string.Join(',', tags)}}],
-                "Recipes": [{{string.Join(',', recipes)}}]
-              }
-              """
-        });
+        File.WriteAllText("exported_data.json", JsonConvert.SerializeObject(data, options));
     }
 
     public static Dictionary<string, string> GenerateLocalization(string name)
@@ -61,7 +53,27 @@ public static class DataExporter
 }
 
 [JsonObject(MemberSerialization.OptIn)]
-public class ExportedRecipe
+public class ExportedData
+{
+    [JsonProperty] public List<SkillExported> Skills { get; set; }
+
+    [JsonProperty] public List<ItemExported> Items { get; set; }
+
+    [JsonProperty] public List<TagExported> Tags { get; set; }
+
+    [JsonProperty] public List<RecipeExported> Recipes { get; set; }
+
+    public ExportedData(List<SkillExported> skills, List<ItemExported> items, List<TagExported> tags, List<RecipeExported> recipes)
+    {
+        this.Skills = skills;
+        this.Items = items;
+        this.Tags = tags;
+        this.Recipes = recipes;
+    }
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public class RecipeExported
 {
     [JsonProperty] public string Name { get; set; }
 
@@ -87,7 +99,7 @@ public class ExportedRecipe
 
     [JsonProperty] public List<ProductExported> Products { get; set; }
 
-    public ExportedRecipe(Recipe recipe)
+    public RecipeExported(Recipe recipe)
     {
         this.Name = recipe.Name;
         this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName);

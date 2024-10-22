@@ -15,19 +15,19 @@ public static class ChatCommand
     {
         DataExporter.ExportAll();
     }
-    
-    [ChatSubCommand("AutoShop", "Synchronize targetted shop with the website", ChatAuthorizationLevel.User)]
+
+    /*[ChatSubCommand("AutoShop", "Synchronize targetted shop with the website", ChatAuthorizationLevel.User)]
     public static void SyncShop(User user, INetObject target, String userId, String shopName)
     {
         var storeComponent = (target as WorldObject)?.GetComponent<StoreComponent>();
-        
+
         if (storeComponent == null)
         {
             user.Player.Error(Localizer.DoStr("You need to target a Store or a WoodChopCart !"));
             return;
         }
-        
+
         AutoShop.SyncShop(storeComponent, userId, shopName);
-    }
+    }*/
 }
 

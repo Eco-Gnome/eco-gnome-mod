@@ -13,19 +13,17 @@ public static class AutoShop
         response.EnsureSuccessStatusCode();
         string jsonResponse = await response.Content.ReadAsStringAsync();
         // List<WebsiteShopOffer> websiteOffers = JsonSerializer.Deserialize<List<WebsiteShopOffer>>(jsonResponse) ?? new List<WebsiteShopOffer>();
-        
+
         // Reset the store
         storeComponent.StoreData.SellCategories.Clear();
         storeComponent.StoreData.BuyCategories.Clear();
-        
-        
     }
 }
 
 public enum OfferType
 {
     Buy,
-    Sell 
+    Sell
 }
 
 /*public class WebsiteShopOffer
