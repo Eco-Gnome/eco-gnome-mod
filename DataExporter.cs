@@ -101,7 +101,7 @@ public class RecipeExported
 
     public RecipeExported(Recipe recipe)
     {
-        this.Name = recipe.Name;
+        this.Name = recipe.GetType().Name;
         this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName);
         this.FamilyName = recipe.Family.RecipeName;
         this.CraftMinutes = recipe.Family.CraftMinutes.GetBaseValue;
