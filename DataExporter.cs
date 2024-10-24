@@ -31,7 +31,7 @@ public static class DataExporter
                 where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
                 select new TagExported(tag)
             ).ToList(),
-            RecipeManager.AllRecipes.Select(recipe => new RecipeExported(recipe)).ToList()
+            RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe))).ToList()
         );
 
         File.WriteAllText("exported_data.json", JsonConvert.SerializeObject(data, options));
@@ -99,24 +99,24 @@ public class RecipeExported
 
     [JsonProperty] public List<ProductExported> Products { get; set; }
 
-    public RecipeExported(Recipe recipe)
+    public RecipeExported(RecipeFamily recipeFamily, Recipe recipe)
     {
-        this.Name = recipe.GetType().Name;
+        this.Name = recipe.GetType() != typeof(Recipe) ? recipe.GetType().Name : recipeFamily.GetType().Name;
         this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName);
-        this.FamilyName = recipe.Family.RecipeName;
-        this.CraftMinutes = recipe.Family.CraftMinutes.GetBaseValue;
+        this.FamilyName = recipeFamily.RecipeName;
+        this.CraftMinutes = recipeFamily.CraftMinutes.GetBaseValue;
 
-        var skill = recipe.Family.RequiredSkills.FirstOrDefault();
+        var skill = recipeFamily.RequiredSkills.FirstOrDefault();
 
         this.RequiredSkill = skill != null ? Item.Get(skill.SkillType).Name : "";
         this.RequiredSkillLevel = skill?.Level ?? 0;
 
         this.IsBlueprint = recipe.RequiresStrangeBlueprint;
-        this.IsDefault = recipe == recipe.Family.DefaultRecipe;
+        this.IsDefault = recipe == recipeFamily.DefaultRecipe;
 
-        this.Labor = recipe.Family.Labor;
+        this.Labor = recipeFamily.Labor;
 
-        this.CraftingTable = recipe.Family.CraftingTable.Name;
+        this.CraftingTable = recipeFamily.CraftingTable.Name;
 
         this.Ingredients = new List<IngredientExported>();
         foreach (var ingredient in recipe.Ingredients)
