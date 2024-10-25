@@ -12,29 +12,39 @@ namespace CavRnMods.DataExporter;
 
 public static class DataExporter
 {
-    public static readonly TalentGroup[] AllTalentGroups = typeof(TalentGroup).InstancesOfCreatableTypesParallel<TalentGroup>().ToArray();
-    public static readonly List<Item> CraftingTables = RecipeManager.AllRecipes.Select(r => r.Family.CraftingTable).Distinct().ToList();
-
     public static void ExportAll()
     {
-        var options = new JsonSerializerSettings
+        try
         {
-            NullValueHandling = NullValueHandling.Ignore,
-            Formatting = Formatting.Indented
-        };
+            var allTalentGroups = typeof(TalentGroup).InstancesOfCreatableTypesParallel<TalentGroup>().ToArray();
+            var craftingTables = RecipeManager.AllRecipes.Where(r => r.Family?.CraftingTable is not null).Select(r => r.Family.CraftingTable).Distinct()
+                .ToList();
 
-        var data = new ExportedData(
-            Skill.AllSkills.Select(skill => new SkillExported(skill)).ToList(),
-            Item.AllItemsExceptHidden.Select(item => new ItemExported(item)).ToList(),
-            (
-                from tag in TagManager.AllTags
-                where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
-                select new TagExported(tag)
-            ).ToList(),
-            RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe))).ToList()
-        );
+            var options = new JsonSerializerSettings
+            {
+                NullValueHandling = NullValueHandling.Ignore,
+                Formatting = Formatting.Indented
+            };
 
-        File.WriteAllText("exported_data.json", JsonConvert.SerializeObject(data, options));
+            var data = new ExportedData(
+                Skill.AllSkills.Select(skill => new SkillExported(skill, allTalentGroups)).ToList(),
+                Item.AllItemsExceptHidden.Select(item => new ItemExported(item, craftingTables)).ToList(),
+                (
+                    from tag in TagManager.AllTags
+                    where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
+                    select new TagExported(tag)
+                ).ToList(),
+                RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe))).ToList()
+            );
+
+            File.WriteAllText("exported_data.json", JsonConvert.SerializeObject(data, options));
+        }
+        catch (Exception e)
+        {
+            File.WriteAllText("exported_data_error.txt", e.ToString());
+
+            Console.WriteLine(e);
+        }
     }
 
     public static Dictionary<string, string> GenerateLocalization(string name)
@@ -149,30 +159,34 @@ public class ProductExported
     {
         this.ItemOrTag = craftingElement.Item.Name;
 
-        if (craftingElement.Quantity is ModuleModifiedValue moduleModifiedValue)
+        switch (craftingElement.Quantity)
         {
-            this.Quantity = craftingElement.Quantity.GetBaseValue;
-            this.IsDynamic = true;
+            case ModuleModifiedValue moduleModifiedValue:
+            {
+                this.Quantity = craftingElement.Quantity.GetBaseValue;
+                this.IsDynamic = true;
 
-            var skillType = moduleModifiedValue.SkillType;
-            this.Skill = skillType != null ? Item.Get(skillType).Name : "";
-        }
-        else if (craftingElement.Quantity is MultiDynamicValue multiDynamicValue)
-        {
-            this.Quantity = craftingElement.Quantity.GetBaseValue;
-            this.IsDynamic = true;
+                var skillType = moduleModifiedValue.SkillType;
+                this.Skill = skillType != null ? Item.Get(skillType).Name : "";
+                break;
+            }
+            case MultiDynamicValue multiDynamicValue:
+            {
+                this.Quantity = craftingElement.Quantity.GetBaseValue;
+                this.IsDynamic = true;
 
-            var skillType = ((ModuleModifiedValue)multiDynamicValue.Values[0]).SkillType;
-            this.Skill = skillType != null ? Item.Get(skillType).Name : "";
+                var skillType = ((ModuleModifiedValue)multiDynamicValue.Values[0]).SkillType;
+                this.Skill = skillType != null ? Item.Get(skillType).Name : "";
 
-            this.LavishTalent = true;
-        }
-        else
-        {
-            this.Quantity = craftingElement.Quantity.GetBaseValue;
-            this.IsDynamic = false;
-            this.Skill = "";
-            this.LavishTalent = false;
+                this.LavishTalent = true;
+                break;
+            }
+            default:
+                this.Quantity = craftingElement.Quantity.GetBaseValue;
+                this.IsDynamic = false;
+                this.Skill = "";
+                this.LavishTalent = false;
+                break;
         }
     }
 }
@@ -237,7 +251,7 @@ public class ItemExported
 
     [JsonProperty] public string[]? CraftingTablePluginModules { get; set; }
 
-    public ItemExported(Item item)
+    public ItemExported(Item item, List<Item> craftingTables)
     {
         this.Name = item.Name;
         this.LocalizedName = DataExporter.GenerateLocalization(item.DisplayName);
@@ -248,34 +262,30 @@ public class ItemExported
             this.PluginModulePercent = efficiencyModule.SkillType != null ? efficiencyModule.SkillMultiplier : efficiencyModule.GenericMultiplier;
         }
 
-        if (DataExporter.CraftingTables.Contains(item))
+        if (!craftingTables.Contains(item)) return;
+
+        this.IsCraftingTable = true;
+        var stackables = ItemAttribute.Get<AllowPluginModulesAttribute>(item.Type)?.GetStackables();
+
+        if (stackables == null) return;
+
+        var modules = new List<string>();
+
+        foreach (var stackable in stackables)
         {
-            this.IsCraftingTable = true;
-
-            var stackables = ItemAttribute.Get<AllowPluginModulesAttribute>(item.Type)?.GetStackables();
-
-            if (stackables != null)
+            if (stackable is not Tag tag)
             {
-                List<string> modules = new List<string>();
-
-                foreach (var stackable in stackables)
-                {
-                    if (!(stackable is Tag tag))
-                    {
-                        modules.Add(Item.Get(stackable.GetType()).Name);
-                        continue;
-                    }
-
-                    if (!TagManager.TagToTypes.TryGetValue(tag, out var moduleTypes))
-                        continue;
-
-                    foreach (var moduleType in moduleTypes)
-                        modules.Add(Item.Get(moduleType).Name);
-                }
-
-                this.CraftingTablePluginModules = modules.ToArray();
+                modules.Add(Item.Get(stackable.GetType()).Name);
+                continue;
             }
+
+            if (!TagManager.TagToTypes.TryGetValue(tag, out var moduleTypes))
+                continue;
+
+            modules.AddRange(moduleTypes.Select(moduleType => Item.Get(moduleType).Name));
         }
+
+        this.CraftingTablePluginModules = modules.ToArray();
     }
 }
 
@@ -309,14 +319,14 @@ public class SkillExported
 
     [JsonProperty] public float? LavishTalentValue { get; set; }
 
-    public SkillExported(Skill skill)
+    public SkillExported(Skill skill, TalentGroup[] allTalentGroups)
     {
         this.Name = skill.Name;
         this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName);
         this.Profession = skill.Prerequisites.FirstOrDefault()?.SkillType.Name;
         this.LaborReducePercent = skill.MultiStrategy.Factors;
 
-        var lavishTalentGroup = DataExporter.AllTalentGroups.FirstOrDefault(tg => tg.OwningSkill == skill.Type && tg.Type.ToString().Contains("LavishWorkspace"));
+        var lavishTalentGroup = allTalentGroups.FirstOrDefault(tg => tg.OwningSkill == skill.Type && tg.Type.ToString().Contains("LavishWorkspace"));
 
         if (lavishTalentGroup is not null)
         {
