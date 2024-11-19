@@ -7,5 +7,5 @@ It allows to extract your specific server configuration (skills, recipes, items,
 Extracted file will be created in your server file root folder: `exported_data.json`
 
 ## Contact
-Zangdar (Discord: #zangdar1111)
+Zangdar (Discord: #zangdar1111)  
 Joridan (Discord: #joridan)
