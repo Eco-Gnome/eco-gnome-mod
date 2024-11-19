@@ -1,4 +1,5 @@
 ﻿using Eco.Core.Utils;
+using Eco.Gameplay.Civics.Immigration;
 using Eco.Gameplay.DynamicValues;
 using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
@@ -129,13 +130,13 @@ public class RecipeExported
         this.CraftingTable = recipeFamily.CraftingTable.Name;
 
         this.Ingredients = new List<IngredientExported>();
-        foreach (var ingredient in recipe.Ingredients)
+        foreach (var ingredient in recipe.Ingredients.Where(i => i is not null))
         {
             this.Ingredients.Add(new IngredientExported(ingredient));
         }
 
         this.Products = new List<ProductExported>();
-        foreach (var product in recipe.Products)
+        foreach (var product in recipe.Products.Where(i => i is not null))
         {
             this.Products.Add(new ProductExported(product));
         }
@@ -206,29 +207,29 @@ public class IngredientExported
 
     public IngredientExported(IngredientElement ingredientElement)
     {
-        this.ItemOrTag = ingredientElement.Tag?.Name ?? ingredientElement.Item.Name;
+        this.ItemOrTag = ingredientElement.Tag?.Name ?? ingredientElement.Item?.Name ?? "404";
 
         if (ingredientElement.Quantity is ModuleModifiedValue moduleModifiedQuantity)
         {
-            this.Quantity = ingredientElement.Quantity.GetBaseValue;
+            this.Quantity = ingredientElement.Quantity?.GetBaseValue ?? -404;
             this.IsDynamic = true;
 
             var skillType = moduleModifiedQuantity.SkillType;
-            this.Skill = skillType != null && skillType != typeof(Skill) ? Item.Get(skillType).Name : "";
+            this.Skill = skillType != null && skillType != typeof(Skill) ? Item.Get(skillType)?.Name ?? "404" : "";
         }
         else if (ingredientElement.Quantity is MultiDynamicValue multiDynamicQuantity)
         {
-            this.Quantity = ingredientElement.Quantity.GetBaseValue;
+            this.Quantity = ingredientElement.Quantity?.GetBaseValue ?? -404;
             this.IsDynamic = true;
 
-            var skillType = ((ModuleModifiedValue)multiDynamicQuantity.Values[0]).SkillType;
-            this.Skill = skillType != null ? Item.Get(skillType).Name : "";
+            var skillType = ((ModuleModifiedValue)multiDynamicQuantity.Values[0])?.SkillType;
+            this.Skill = skillType != null ? Item.Get(skillType)?.Name ?? "404" : "";
 
             this.LavishTalent = true;
         }
         else
         {
-            this.Quantity = ingredientElement.Quantity.GetBaseValue;
+            this.Quantity = ingredientElement.Quantity?.GetBaseValue ?? -404;
             this.IsDynamic = false;
             this.Skill = "";
             this.LavishTalent = false;
