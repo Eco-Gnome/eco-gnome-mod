@@ -1,15 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>$(EcoServerTargetFramework)</TargetFramework>
+      <TargetFramework>net8.0-windows</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <RootNamespace>EcoGnomeMod</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\Eco.Core\Eco.Core.csproj" />
       <ProjectReference Include="..\Eco.Gameplay\Eco.Gameplay.csproj" />
       <ProjectReference Include="..\Eco.Mods\Eco.Mods.csproj" />
+      <ProjectReference Include="..\Eco.Plugins\Eco.Plugins.csproj" />
     </ItemGroup>
 
 </Project>

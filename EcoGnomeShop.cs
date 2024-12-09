@@ -1,11 +1,26 @@
-﻿using System.Text.Json;
-using Eco.Gameplay.Components.Store;
+﻿using Eco.Gameplay.Components.Store;
 
-namespace CavRnMods.DataExporter;
+namespace EcoGnomeMod;
 
-public static class AutoShop
+public static class EcoGnomeShop
 {
-    public static async void SyncShop(StoreComponent storeComponent, String userId, String shopName)
+    public static void SyncPrices(List<EcoGnomePrice> ecoGnomePrices, StoreComponent storeComponent)
+    {
+        foreach (var category in storeComponent.StoreData.SellCategories.Concat(storeComponent.StoreData.BuyCategories))
+        {
+            foreach (var offer in category.Offers.Where(o => o.Stack.Item is not null))
+            {
+                var associatedPrice = ecoGnomePrices.Find(p => p.Name == offer.Stack.Item!.Name);
+
+                if (associatedPrice is not null)
+                {
+                    offer.Price = (float)associatedPrice.Price;
+                }
+            }
+        }
+    }
+
+    /*public static async void SyncShop(StoreComponent storeComponent, String userId, String shopName)
     {
         // Retrieve online data
         var http = new HttpClient();
@@ -17,14 +32,14 @@ public static class AutoShop
         // Reset the store
         storeComponent.StoreData.SellCategories.Clear();
         storeComponent.StoreData.BuyCategories.Clear();
-    }
+    }*/
 }
 
-public enum OfferType
+/*public enum OfferType
 {
     Buy,
     Sell
-}
+}*/
 
 /*public class WebsiteShopOffer
 {

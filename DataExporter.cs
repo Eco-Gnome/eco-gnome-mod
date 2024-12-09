@@ -1,15 +1,13 @@
 ﻿using Eco.Core.Utils;
-using Eco.Gameplay.Civics.Immigration;
 using Eco.Gameplay.DynamicValues;
 using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
 using Eco.Gameplay.Modules;
 using Eco.Gameplay.Skills;
-using Eco.Mods.TechTree;
 using Eco.Shared.Localization;
 using Newtonsoft.Json;
 
-namespace CavRnMods.DataExporter;
+namespace EcoGnomeMod;
 
 public static class DataExporter
 {
@@ -38,11 +36,11 @@ public static class DataExporter
                 RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe))).ToList()
             );
 
-            File.WriteAllText("exported_data.json", JsonConvert.SerializeObject(data, options));
+            File.WriteAllText("eco_gnome_data.json", JsonConvert.SerializeObject(data, options));
         }
         catch (Exception e)
         {
-            File.WriteAllText("exported_data_error.txt", e.ToString());
+            File.WriteAllText("eco_gnome_error.txt", e.ToString());
 
             Console.WriteLine(e);
         }
