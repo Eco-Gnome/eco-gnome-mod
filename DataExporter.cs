@@ -322,8 +322,8 @@ public class SkillExported
     {
         this.Name = skill.Name;
         this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName);
-        this.Profession = skill.Prerequisites.FirstOrDefault()?.SkillType.Name;
-        this.LaborReducePercent = skill.MultiStrategy.Factors;
+        this.Profession = skill.Prerequisites?.FirstOrDefault()?.SkillType.Name;
+        this.LaborReducePercent = skill.MultiStrategy?.Factors ?? [];
 
         var lavishTalentGroup = allTalentGroups.FirstOrDefault(tg => tg.OwningSkill == skill.Type && tg.Type.ToString().Contains("LavishWorkspace"));
 
