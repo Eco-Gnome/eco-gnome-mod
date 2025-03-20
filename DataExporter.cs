@@ -111,7 +111,7 @@ public class RecipeExported
     public RecipeExported(RecipeFamily recipeFamily, Recipe recipe)
     {
         this.Name = recipe.GetType() != typeof(Recipe) ? recipe.GetType().Name : recipeFamily.GetType().Name;
-        this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName);
+        this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName.NotTranslated);
         this.FamilyName = recipeFamily.RecipeName;
         this.CraftMinutes = recipeFamily.CraftMinutes.GetBaseValue;
 
@@ -253,7 +253,7 @@ public class ItemExported
     public ItemExported(Item item, List<Item> craftingTables)
     {
         this.Name = item.Name;
-        this.LocalizedName = DataExporter.GenerateLocalization(item.DisplayName);
+        this.LocalizedName = DataExporter.GenerateLocalization(item.DisplayName.NotTranslated);
 
         if (item is EfficiencyModule efficiencyModule)
         {
@@ -300,7 +300,7 @@ public class TagExported
     public TagExported(Tag tag)
     {
         this.Name = tag.Name;
-        this.LocalizedName = DataExporter.GenerateLocalization(tag.DisplayName);
+        this.LocalizedName = DataExporter.GenerateLocalization(tag.DisplayName.NotTranslated);
         this.AssociatedItems = Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).ToArray();
     }
 }
@@ -321,7 +321,7 @@ public class SkillExported
     public SkillExported(Skill skill, TalentGroup[] allTalentGroups)
     {
         this.Name = skill.Name;
-        this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName);
+        this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName.NotTranslated);
         this.Profession = skill.Prerequisites?.FirstOrDefault()?.SkillType.Name;
         this.LaborReducePercent = skill.MultiStrategy?.Factors ?? [];
 

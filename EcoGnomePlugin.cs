@@ -1,21 +1,19 @@
 ﻿using Eco.Core.Plugins;
 using Eco.Shared.Utils;
-
-namespace EcoGnomeMod;
-
 using Eco.Core.Plugins.Interfaces;
 using Eco.Core.Utils;
 
-public class EcoGnomeMod : IModInit
+namespace EcoGnomeMod;
+
+public class EcoGnomeMod: IModInit
 {
     public static ModRegistration Register() => new()
     {
         ModName = "EcoGnome",
         ModDescription = "Eco Gnome allows you to calculate your prices like a chef, thanks to an external website at https://eco-gnome.com",
-        ModDisplayName = "Eco Gnome",
+        ModDisplayName = "Eco Gnome"
     };
 }
-
 
 public class EcoGnomeConfig: Singleton<EcoGnomeConfig>
 {
