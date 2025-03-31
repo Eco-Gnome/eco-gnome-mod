@@ -13,7 +13,7 @@ It allows to synchronize prices between your shops and EcoGnome website thanks t
 
 ## Installation
 
-Download the latest .dll file from: https://github.com/Eco-Gnome/eco-gnome-mod/releases
+Download the latest .dll file from [Release page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) 
 
 ## Contact
 Zangdar (Discord: #zangdar1111)  
