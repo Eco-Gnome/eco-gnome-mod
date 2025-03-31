@@ -11,6 +11,10 @@ It allows to synchronize prices between your shops and EcoGnome website thanks t
 - /EcoGnome registeruser **{SecretId}**     :   To be launched by all users only one time
 - /EcoGnome syncshop                    :   Apply your EcoGnome prices on your targeted shop. It doesn't add or remove items, only edit prices of matching items.
 
+## Installation
+
+Download the latest .dll file from: https://github.com/Eco-Gnome/eco-gnome-mod/releases
+
 ## Contact
 Zangdar (Discord: #zangdar1111)  
 Joridan (Discord: #joridan)
