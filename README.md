@@ -1,6 +1,6 @@
 # Eco Gnome Mod
 
-## Project is currently in beta
+## Project is currently in release candidate !
 
 This repository contains the Data Extractor part of [Eco Gnome](https://eco-gnome.com).   
 It allows to extract your specific server configuration (skills, recipes, items, ...) to visualize and calculate their price in [Eco Gnome](https://eco-gnome.com) website.  
