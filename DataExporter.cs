@@ -1,4 +1,5 @@
-﻿using Eco.Core.Utils;
+﻿using System.Reflection;
+using Eco.Core.Utils;
 using Eco.Gameplay.DynamicValues;
 using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
@@ -22,7 +23,7 @@ public static class DataExporter
             var options = new JsonSerializerSettings
             {
                 NullValueHandling = NullValueHandling.Ignore,
-                Formatting = Formatting.Indented
+                Formatting = Formatting.Indented,
             };
 
             var data = new ExportedData(
@@ -64,16 +65,15 @@ public static class DataExporter
 [JsonObject(MemberSerialization.OptIn)]
 public class ExportedData
 {
+    [JsonProperty] public int Version { get; set; }
     [JsonProperty] public List<SkillExported> Skills { get; set; }
-
     [JsonProperty] public List<ItemExported> Items { get; set; }
-
     [JsonProperty] public List<TagExported> Tags { get; set; }
-
     [JsonProperty] public List<RecipeExported> Recipes { get; set; }
 
     public ExportedData(List<SkillExported> skills, List<ItemExported> items, List<TagExported> tags, List<RecipeExported> recipes)
     {
+        this.Version = 1; // version of the file, to be changed when a breaking change is done. Eco Gnome will refuse to import files with older version.
         this.Skills = skills;
         this.Items = items;
         this.Tags = tags;
@@ -85,27 +85,16 @@ public class ExportedData
 public class RecipeExported
 {
     [JsonProperty] public string Name { get; set; }
-
     [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
-
     [JsonProperty] public string FamilyName { get; set; }
-
-    [JsonProperty] public float CraftMinutes { get; set; }
-
+    [JsonProperty] public DynamicValueExported CraftMinutes { get; set; }
     [JsonProperty] public string RequiredSkill { get; set; }
-
     [JsonProperty] public int RequiredSkillLevel { get; set; }
-
     [JsonProperty] public bool IsBlueprint { get; set; }
-
     [JsonProperty] public bool IsDefault { get; set; }
-
-    [JsonProperty] public float Labor { get; set; }
-
+    [JsonProperty] public DynamicValueExported Labor { get; set; }
     [JsonProperty] public String CraftingTable { get; set; }
-
     [JsonProperty] public List<IngredientExported> Ingredients { get; set; }
-
     [JsonProperty] public List<ProductExported> Products { get; set; }
 
     public RecipeExported(RecipeFamily recipeFamily, Recipe recipe)
@@ -113,7 +102,7 @@ public class RecipeExported
         this.Name = recipe.GetType() != typeof(Recipe) ? recipe.GetType().Name : recipeFamily.GetType().Name;
         this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName.NotTranslated);
         this.FamilyName = recipeFamily.RecipeName;
-        this.CraftMinutes = recipeFamily.CraftMinutes.GetBaseValue;
+        this.CraftMinutes = new DynamicValueExported(recipeFamily.CraftMinutes);
 
         var skill = recipeFamily.RequiredSkills.FirstOrDefault();
 
@@ -123,7 +112,7 @@ public class RecipeExported
         this.IsBlueprint = recipe.RequiresStrangeBlueprint;
         this.IsDefault = recipe == recipeFamily.DefaultRecipe;
 
-        this.Labor = recipeFamily.Labor;
+        this.Labor = new DynamicValueExported(recipeFamily.LaborInCalories);
 
         this.CraftingTable = recipeFamily.CraftingTable.Name;
 
@@ -145,48 +134,12 @@ public class RecipeExported
 public class ProductExported
 {
     [JsonProperty] public string ItemOrTag { get; set; }
-
-    [JsonProperty] public float Quantity { get; set; }
-
-    [JsonProperty] public bool IsDynamic { get; set; }
-
-    [JsonProperty] public string Skill { get; set; }
-
-    [JsonProperty] public bool LavishTalent { get; set; }
+    [JsonProperty] public DynamicValueExported Quantity { get; set; }
 
     public ProductExported(CraftingElement craftingElement)
     {
         this.ItemOrTag = craftingElement.Item.Name;
-
-        switch (craftingElement.Quantity)
-        {
-            case ModuleModifiedValue moduleModifiedValue:
-            {
-                this.Quantity = craftingElement.Quantity.GetBaseValue;
-                this.IsDynamic = true;
-
-                var skillType = moduleModifiedValue.SkillType;
-                this.Skill = skillType != null ? Item.Get(skillType).Name : "";
-                break;
-            }
-            case MultiDynamicValue multiDynamicValue:
-            {
-                this.Quantity = craftingElement.Quantity.GetBaseValue;
-                this.IsDynamic = true;
-
-                var skillType = ((ModuleModifiedValue)multiDynamicValue.Values[0]).SkillType;
-                this.Skill = skillType != null ? Item.Get(skillType).Name : "";
-
-                this.LavishTalent = true;
-                break;
-            }
-            default:
-                this.Quantity = craftingElement.Quantity.GetBaseValue;
-                this.IsDynamic = false;
-                this.Skill = "";
-                this.LavishTalent = false;
-                break;
-        }
+        this.Quantity = new DynamicValueExported(craftingElement.Quantity);
     }
 }
 
@@ -194,44 +147,12 @@ public class ProductExported
 public class IngredientExported
 {
     [JsonProperty] public string ItemOrTag { get; set; }
-
-    [JsonProperty] public float Quantity { get; set; }
-
-    [JsonProperty] public bool IsDynamic { get; set; }
-
-    [JsonProperty] public string Skill { get; set; }
-
-    [JsonProperty] public bool LavishTalent { get; set; }
+    [JsonProperty] public DynamicValueExported Quantity { get; set; }
 
     public IngredientExported(IngredientElement ingredientElement)
     {
-        this.ItemOrTag = ingredientElement.Tag?.Name ?? ingredientElement.Item?.Name ?? "404";
-
-        if (ingredientElement.Quantity is ModuleModifiedValue moduleModifiedQuantity)
-        {
-            this.Quantity = ingredientElement.Quantity?.GetBaseValue ?? -404;
-            this.IsDynamic = true;
-
-            var skillType = moduleModifiedQuantity.SkillType;
-            this.Skill = skillType != null && skillType != typeof(Skill) ? Item.Get(skillType)?.Name ?? "404" : "";
-        }
-        else if (ingredientElement.Quantity is MultiDynamicValue multiDynamicQuantity)
-        {
-            this.Quantity = ingredientElement.Quantity?.GetBaseValue ?? -404;
-            this.IsDynamic = true;
-
-            var skillType = ((ModuleModifiedValue)multiDynamicQuantity.Values[0])?.SkillType;
-            this.Skill = skillType != null ? Item.Get(skillType)?.Name ?? "404" : "";
-
-            this.LavishTalent = true;
-        }
-        else
-        {
-            this.Quantity = ingredientElement.Quantity?.GetBaseValue ?? -404;
-            this.IsDynamic = false;
-            this.Skill = "";
-            this.LavishTalent = false;
-        }
+        this.ItemOrTag = ingredientElement.Tag?.Name ?? ingredientElement.Item?.Name ?? "DataError-NoNameFound";
+        this.Quantity = new DynamicValueExported(ingredientElement.Quantity);
     }
 }
 
@@ -239,15 +160,10 @@ public class IngredientExported
 public class ItemExported
 {
     [JsonProperty] public string Name { get; set; }
-
     [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
-
     [JsonProperty] public bool? IsPluginModule { get; set; }
-
     [JsonProperty] public float? PluginModulePercent { get; set; }
-
     [JsonProperty] public bool? IsCraftingTable { get; set; }
-
     [JsonProperty] public string[]? CraftingTablePluginModules { get; set; }
 
     public ItemExported(Item item, List<Item> craftingTables)
@@ -292,9 +208,7 @@ public class ItemExported
 public class TagExported
 {
     [JsonProperty] public string Name { get; set; }
-
     [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
-
     [JsonProperty] public string[] AssociatedItems { get; set; }
 
     public TagExported(Tag tag)
@@ -309,14 +223,10 @@ public class TagExported
 public class SkillExported
 {
     [JsonProperty] public string Name { get; set; }
-
     [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
-
     [JsonProperty] public string? Profession { get; set; }
-
     [JsonProperty] public float[] LaborReducePercent { get; set; }
-
-    [JsonProperty] public float? LavishTalentValue { get; set; }
+    [JsonProperty] public List<TalentExported> Talents { get; set; }
 
     public SkillExported(Skill skill, TalentGroup[] allTalentGroups)
     {
@@ -325,11 +235,127 @@ public class SkillExported
         this.Profession = skill.Prerequisites?.FirstOrDefault()?.SkillType.Name;
         this.LaborReducePercent = skill.MultiStrategy?.Factors ?? [];
 
-        var lavishTalentGroup = allTalentGroups.FirstOrDefault(tg => tg.OwningSkill == skill.Type && tg.Type.ToString().Contains("LavishWorkspace"));
+        this.Talents = allTalentGroups
+            .Where(tg => tg.OwningSkill == skill.Type)
+            .SelectMany(tg => TalentManager.AllTalents
+                .Where(t => t.TalentGroupType == tg.Type)
+                .Select(t => new TalentExported(t, tg)))
+            .ToList();
+    }
+}
 
-        if (lavishTalentGroup is not null)
+[JsonObject(MemberSerialization.OptIn)]
+public class TalentExported
+{
+    [JsonProperty] public string Name { get; set; }
+    [JsonProperty] public string TalentGroupName { get; set; }
+    [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
+    [JsonProperty] public float Value { get; set; }
+    [JsonProperty] public int Level { get; set; }
+
+    public TalentExported(Talent talent, TalentGroup talentGroup)
+    {
+        this.Name = talent.GetType().Name;
+        this.TalentGroupName = talentGroup.GetType().Name;
+        if (talentGroup.GetType().GetCustomAttribute<LocDisplayNameAttribute>() is not null)
         {
-            this.LavishTalentValue = TalentManager.AllTalents.FirstOrDefault(t => t.GetType() == lavishTalentGroup.Talents[0])?.Value;
+            this.LocalizedName = DataExporter.GenerateLocalization(talentGroup.GetType().GetCustomAttribute<LocDisplayNameAttribute>()!.Name);
         }
+        else
+        {
+            Console.WriteLine("No loc for " + talent.GetType().Name);
+            this.LocalizedName = new Dictionary<string, string>();
+        }
+
+        this.Value = talent.Value;
+        this.Level = talentGroup.Level;
+    }
+}
+
+public class DynamicTypeWriteOnlyConverter : JsonConverter
+{
+    public override bool CanConvert(Type objectType) => objectType == typeof(DynamicType);
+
+    public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
+    {
+        writer.WriteValue(value!.ToString());
+    }
+
+    public override bool CanRead => false;
+    public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
+        => throw new NotImplementedException();
+}
+
+[JsonConverter(typeof(DynamicTypeWriteOnlyConverter))]
+public class DynamicType
+{
+    private DynamicType(string value) => this.Value = value;
+
+    private string Value { get; }
+
+    public static DynamicType Module => new("Module");
+    public static DynamicType Talent => new("Talent");
+    public static DynamicType Skill => new("Skill");
+    public static DynamicType Layer => new("Layer");
+
+    public override string ToString()
+    {
+        return this.Value;
+    }
+}
+
+// We consider all Ops of MultiDynamicValue are necessary Multiply. Change this algo if it's not the case
+[JsonObject(MemberSerialization.OptIn)]
+public class DynamicValueExported
+{
+    [JsonProperty] public float BaseValue { get; set; }
+    [JsonProperty] public List<ModifierExported> Modifiers { get; set; }
+
+    public DynamicValueExported(IDynamicValue dynamicValue)
+    {
+        this.BaseValue = dynamicValue.GetBaseValue;
+        this.Modifiers = new List<ModifierExported>();
+
+        List<IDynamicValue> dynamicValues = dynamicValue is MultiDynamicValue multiDynamicValue ? multiDynamicValue.Values.ToList() : [dynamicValue];
+
+        foreach (var dyn in dynamicValues)
+        {
+            switch (dyn)
+            {
+                case ModuleModifiedValue moduleModifiedValue:
+                {
+                    this.Modifiers.Add(new ModifierExported(DynamicType.Module, moduleModifiedValue.SkillType?.Name ?? ""));
+                    break;
+                }
+                case TalentModifiedValue talentModifiedValue:
+                {
+                    this.Modifiers.Add(new ModifierExported(DynamicType.Talent, talentModifiedValue.TalentType.Name));
+                    break;
+                }
+                case SkillModifiedValue skillModifiedValue:
+                {
+                    this.Modifiers.Add(new ModifierExported(DynamicType.Skill, skillModifiedValue.Skill.Name));
+                    break;
+                }
+                case LayerModifiedValue layerModifiedValue:
+                {
+                    this.Modifiers.Add(new ModifierExported(DynamicType.Layer, layerModifiedValue.Layer));
+                    break;
+                }
+            }
+        }
+    }
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public class ModifierExported
+{
+    [JsonProperty] public DynamicType DynamicType { get; set; }
+    [JsonProperty] public string Item { get; set; }
+
+    public ModifierExported(DynamicType dyn, string item)
+    {
+        this.DynamicType = dyn;
+        this.Item = item;
     }
 }
