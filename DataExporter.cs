@@ -225,6 +225,7 @@ public class SkillExported
     [JsonProperty] public string Name { get; set; }
     [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
     [JsonProperty] public string? Profession { get; set; }
+    [JsonProperty] public int MaxLevel { get; set; }
     [JsonProperty] public float[] LaborReducePercent { get; set; }
     [JsonProperty] public List<TalentExported> Talents { get; set; }
 
@@ -233,6 +234,7 @@ public class SkillExported
         this.Name = skill.Name;
         this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName.NotTranslated);
         this.Profession = skill.Prerequisites?.FirstOrDefault()?.SkillType.Name;
+        this.MaxLevel = skill.MaxLevel;
         this.LaborReducePercent = skill.MultiStrategy?.Factors ?? [];
 
         this.Talents = allTalentGroups
