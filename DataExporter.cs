@@ -162,7 +162,10 @@ public class ItemExported
     [JsonProperty] public string Name { get; set; }
     [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
     [JsonProperty] public bool? IsPluginModule { get; set; }
+    [JsonProperty] public string? PluginType { get; set; }
     [JsonProperty] public float? PluginModulePercent { get; set; }
+    [JsonProperty] public string? PluginModuleSkill { get; set; }
+    [JsonProperty] public float? PluginModuleSkillPercent { get; set; }
     [JsonProperty] public bool? IsCraftingTable { get; set; }
     [JsonProperty] public string[]? CraftingTablePluginModules { get; set; }
 
@@ -174,7 +177,16 @@ public class ItemExported
         if (item is EfficiencyModule efficiencyModule)
         {
             this.IsPluginModule = true;
-            this.PluginModulePercent = efficiencyModule.SkillType != null ? efficiencyModule.SkillMultiplier : efficiencyModule.GenericMultiplier;
+            this.PluginType = (efficiencyModule.ModuleTypes & ModuleTypes.ResourceEfficiency) != 0 && (efficiencyModule.ModuleTypes & ModuleTypes.SpeedEfficiency) != 0
+                ? "Resource&Speed"
+                : (efficiencyModule.ModuleTypes & ModuleTypes.ResourceEfficiency) != 0
+                    ? "Resource"
+                    : (efficiencyModule.ModuleTypes & ModuleTypes.SpeedEfficiency) != 0
+                        ? "Speed"
+                        : null;
+            this.PluginModulePercent = efficiencyModule.GenericMultiplier;
+            this.PluginModuleSkill = efficiencyModule.SkillType?.Name ?? "";
+            this.PluginModuleSkillPercent = efficiencyModule.SkillType is not null ? efficiencyModule.SkillMultiplier : null;
         }
 
         if (!craftingTables.Contains(item)) return;
