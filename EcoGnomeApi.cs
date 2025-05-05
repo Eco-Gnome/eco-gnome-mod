@@ -4,93 +4,120 @@ namespace EcoGnomeMod;
 
 public static class EcoGnomeApi
 {
-    public static async Task<string> RegisterServerAsync(string joinCode, string ecoServerId)
+    public static async Task RegisterServerAsync(string joinCode, string ecoServerId)
     {
-        try
-        {
-            using var httpClient = new HttpClient();
-            var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/register-server?joinCode={Uri.EscapeDataString(joinCode)}&ecoServerId={Uri.EscapeDataString(ecoServerId)}";
-            var response = await httpClient.GetAsync(requestUrl);
+        using var httpClient = new HttpClient();
+        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/register-server?joinCode={Uri.EscapeDataString(joinCode)}&ecoServerId={Uri.EscapeDataString(ecoServerId)}";
+        var response = await httpClient.GetAsync(requestUrl);
 
-            return response.StatusCode switch
-            {
-                System.Net.HttpStatusCode.OK => "OK - Server successfully registered!",
-                System.Net.HttpStatusCode.NotFound => "NotFound - Server not found.",
-                System.Net.HttpStatusCode.BadRequest => "BadRequest - Server is already registered to an other eco server.",
-                _ => $"Unexpected response: {response.StatusCode}"
-            };
-        }
-        catch (HttpRequestException ex)
+        switch (response.StatusCode)
         {
-            return $"HTTP request error: {ex.Message}";
-        }
-        catch (Exception ex)
-        {
-            return $"Unexpected error: {ex.Message}";
+            case System.Net.HttpStatusCode.BadRequest:
+                throw new EcoApiException(await response.Content.ReadAsStringAsync());
+            case System.Net.HttpStatusCode.OK:
+                return;
+            default:
+                throw new Exception(await response.Content.ReadAsStringAsync());
         }
     }
 
-    public static async Task<string> RegisterUserAsync(string ecoServerId, string userSecretId, string ecoUserId, string serverPseudo)
+    public static async Task RegisterUserAsync(string ecoServerId, string userSecretId, string ecoUserId, string serverPseudo)
     {
-        try
-        {
-            using var httpClient = new HttpClient();
-            var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/register-user" +
-                             $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
-                             $"&userSecretId={Uri.EscapeDataString(userSecretId)}" +
-                             $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
-                             $"&serverPseudo={Uri.EscapeDataString(serverPseudo)}";
-            var response = await httpClient.GetAsync(requestUrl);
+        using var httpClient = new HttpClient();
+        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/register-user" +
+                         $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
+                         $"&userSecretId={Uri.EscapeDataString(userSecretId)}" +
+                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
+                         $"&serverPseudo={Uri.EscapeDataString(serverPseudo)}";
+        var response = await httpClient.GetAsync(requestUrl);
 
-            return response.StatusCode switch
-            {
-                System.Net.HttpStatusCode.OK => "OK - User registered successfully",
-                System.Net.HttpStatusCode.NotFound => "NotFound - Make sure the server is registered by the admin, verify your userSecretId, and verify you joined the server on Eco Gnome.",
-                System.Net.HttpStatusCode.BadRequest => "BadRequest - This EcoGnome user is already associated to an other eco user in this server.",
-                _ => $"Unexpected response: {response.StatusCode}"
-            };
-        }
-        catch (HttpRequestException ex)
+        switch (response.StatusCode)
         {
-            return $"HTTP request error: {ex.Message}";
-        }
-        catch (Exception ex)
-        {
-            return $"Unexpected error: {ex.Message}";
+            case System.Net.HttpStatusCode.BadRequest:
+                throw new EcoApiException(await response.Content.ReadAsStringAsync());
+            case System.Net.HttpStatusCode.OK:
+                return;
+            default:
+                throw new Exception(await response.Content.ReadAsStringAsync());
         }
     }
 
-    public static async Task<List<EcoGnomePrice>> GetUserPricesAsync(string ecoServerId, string ecoUserId)
+    public static async Task<List<EcoGnomeItem>> GetUserPricesAsync(string ecoServerId, string ecoUserId, string dataContext)
     {
         using var httpClient = new HttpClient();
         var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/user-prices" +
                          $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
-                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}";
+                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
+                         $"&context={Uri.EscapeDataString(dataContext)}";
         var response = await httpClient.GetAsync(requestUrl);
 
-        if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+        switch (response.StatusCode)
         {
-            throw new EcoApiException("BadRequest");
-        }
+            case System.Net.HttpStatusCode.BadRequest:
+                throw new EcoApiException(await response.Content.ReadAsStringAsync());
+            case System.Net.HttpStatusCode.OK:
+                var jsonResponse = await response.Content.ReadAsStringAsync();
+                var prices = JsonConvert.DeserializeObject<List<EcoGnomeItem>>(jsonResponse);
+                return prices ?? [];
+            default:
+                throw new Exception(await response.Content.ReadAsStringAsync());
+        }    
+    }
 
-        if (response.StatusCode == System.Net.HttpStatusCode.OK)
+    public static async Task<List<EcoGnomeCategory>> GetItemsToBuyAndSellAsync(string ecoServerId, string ecoUserId, string dataContext)
+    {
+        using var httpClient = new HttpClient();
+        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/categories-items" +
+                         $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
+                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
+                         $"&context={Uri.EscapeDataString(dataContext)}";
+        var response = await httpClient.GetAsync(requestUrl);
+
+        switch (response.StatusCode)
         {
-            var jsonResponse = await response.Content.ReadAsStringAsync();
-            var prices = JsonConvert.DeserializeObject<List<EcoGnomePrice>>(jsonResponse);
-            return prices ?? [];
-        }
-
-        throw new EcoApiException($"Unexpected response: {response.StatusCode}");
+            case System.Net.HttpStatusCode.BadRequest:
+                throw new EcoApiException(await response.Content.ReadAsStringAsync());
+            case System.Net.HttpStatusCode.OK:
+                var jsonResponse = await response.Content.ReadAsStringAsync();
+                var prices = JsonConvert.DeserializeObject<List<EcoGnomeCategory>>(jsonResponse);
+                return prices ?? [];
+            default:
+                throw new Exception(await response.Content.ReadAsStringAsync());
+        }    
     }
 }
 
-public class EcoGnomePrice(string name, decimal price)
+public class EcoGnomeCategory(string name, OfferType offerType, List<EcoGnomeItem> items)
+{
+    [JsonProperty(nameof(Name))]
+    public string Name { get; set; } = name;
+
+    [JsonProperty(nameof(OfferType))]
+    public OfferType OfferType { get; set; } = offerType;
+
+    [JsonProperty(nameof(Items))]
+    public List<EcoGnomeItem> Items { get; set; } = items;
+}
+
+public class EcoGnomeItem(string name, decimal price, int minDurability = -1, int maxDurability = -1, int minIntegrity = -1, int maxIntegrity = -1)
 {
     [JsonProperty(nameof(Name))]
     public string Name { get; set; } = name;
 
     [JsonProperty(nameof(Price))]
     public decimal Price { get; set; } = price;
+
+    [JsonProperty(nameof(MinDurability))]
+    public int MinDurability { get; set; } = minDurability;
+
+    [JsonProperty(nameof(MaxDurability))]
+    public int MaxDurability { get; set; } = maxDurability;
+
+    [JsonProperty(nameof(MinIntegrity))]
+    public int MinIntegrity { get; set; } = minIntegrity;
+
+    [JsonProperty(nameof(MaxIntegrity))]
+    public int MaxIntegrity { get; set; } = maxIntegrity;
 }
 
 public class EcoApiException(string message) : Exception(message);
