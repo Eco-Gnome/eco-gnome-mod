@@ -18,6 +18,7 @@ public class EcoGnomeMod: IModInit
 public class EcoGnomeConfig: Singleton<EcoGnomeConfig>
 {
     public string EcoGnomeUrl { get; set; } = "https://eco-gnome.com";
+    public string EcoGnomeUrlReverseProxy { get; set; } = "";
 }
 
 public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitializablePlugin, IConfigurablePlugin

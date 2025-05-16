@@ -144,13 +144,18 @@ public static class EcoGnomeChatCommand
     [ChatSubCommand("EcoGnome", "Open a browser that allows to join Eco Gnome Server.", "egjoin", ChatAuthorizationLevel.User)]
     public static void Join(User user, INetObject target)
     {
-        user.OpenWebpage(EcoGnomePlugin.Obj.Config.EcoGnomeUrl + $"/join-server?ecoServerId={NetworkManager.ServerID.ToString()}");
+        user.OpenWebpage(GetEcoGnomeDisplayUrl() + $"/join-server?ecoServerId={NetworkManager.ServerID.ToString()}");
     }
 
     [ChatSubCommand("EcoGnome", "Open Eco Gnome website.", "egopen", ChatAuthorizationLevel.User)]
     public static void Open(User user, INetObject target)
     {
-        user.OpenWebpage(EcoGnomePlugin.Obj.Config.EcoGnomeUrl + $"/open?ecoServerId={NetworkManager.ServerID.ToString()}");
+        user.OpenWebpage(GetEcoGnomeDisplayUrl() + $"/open?ecoServerId={NetworkManager.ServerID.ToString()}");
+    }
+
+    private static string GetEcoGnomeDisplayUrl()
+    {
+        return EcoGnomePlugin.Obj.Config.EcoGnomeUrlReverseProxy == "" ? EcoGnomePlugin.Obj.Config.EcoGnomeUrl : EcoGnomePlugin.Obj.Config.EcoGnomeUrlReverseProxy;
     }
 
     private static bool EnsuresIsWorldObjectWithStoreComponent(User user, INetObject target, out WorldObject worldObject)
