@@ -13,5 +13,9 @@
       <ProjectReference Include="..\Eco.Mods\Eco.Mods.csproj" />
       <ProjectReference Include="..\Eco.Plugins\Eco.Plugins.csproj" />
     </ItemGroup>
+  
+    <ItemGroup>
+      <None Include="StoreObject.cs" />
+    </ItemGroup>
 
 </Project>
