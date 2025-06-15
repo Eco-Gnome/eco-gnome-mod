@@ -2,6 +2,9 @@
 using Eco.Shared.Utils;
 using Eco.Core.Plugins.Interfaces;
 using Eco.Core.Utils;
+using Eco.Gameplay.Players;
+using Eco.Mods.TechTree;
+using Eco.Shared.Networking;
 
 namespace EcoGnomeMod;
 
@@ -21,6 +24,19 @@ public class EcoGnomeConfig: Singleton<EcoGnomeConfig>
     public string EcoGnomeUrlReverseProxy { get; set; } = "";
 }
 
+public class EcoGnomeChatCommandHandler: IEcoGnomeChatCommand
+{
+    public async Task CreateShop(User user, INetObject target, string dataContext)
+    {
+        await EcoGnomeChatCommand.CreateShop(user, target, dataContext);
+    }
+
+    public async Task SyncShop(User user, INetObject target, string dataContext)
+    {
+        await EcoGnomeChatCommand.SyncShop(user, target, dataContext);
+    }
+}
+
 public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitializablePlugin, IConfigurablePlugin
 {
     public static ThreadSafeAction OnSettingsChanged = new();
@@ -32,6 +48,7 @@ public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitiali
     public EcoGnomePlugin()
     {
         this.config = new PluginConfig<EcoGnomeConfig>("EcoGnome");
+        EcoGnomeChatCommandRegistry.Obj = new EcoGnomeChatCommandHandler();
         this.SaveConfig();
     }
 

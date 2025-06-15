@@ -13,5 +13,10 @@
       <ProjectReference Include="..\Eco.Mods\Eco.Mods.csproj" />
       <ProjectReference Include="..\Eco.Plugins\Eco.Plugins.csproj" />
     </ItemGroup>
+  
+    <ItemGroup>
+      <Compile Remove="StoreObject.cs" />
+      <None Include="StoreObject.cs" />
+    </ItemGroup>
 
 </Project>

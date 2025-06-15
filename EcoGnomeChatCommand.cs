@@ -8,7 +8,6 @@ using Eco.Shared.IoC;
 using Eco.Shared.Items;
 using Eco.Shared.Localization;
 using Eco.Shared.Networking;
-using MoreLinq;
 
 namespace EcoGnomeMod;
 
