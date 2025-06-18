@@ -15,6 +15,7 @@
     </ItemGroup>
   
     <ItemGroup>
+      <Compile Remove="StoreObject.cs" />
       <None Include="StoreObject.cs" />
     </ItemGroup>
 
