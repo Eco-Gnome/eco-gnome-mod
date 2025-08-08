@@ -1,6 +1,6 @@
 # Eco Gnome Mod
 
-## Project is officially released !
+## Optional server mod of [Eco Gnome](https://eco-gnome.com)
 
 This repository contains the Data Extractor part of [Eco Gnome](https://eco-gnome.com).   
 It allows to extract your specific server configuration (skills, recipes, items, ...) to visualize and calculate their price in [Eco Gnome](https://eco-gnome.com) website.  
@@ -18,10 +18,11 @@ It allows to synchronize prices between your shops and EcoGnome website thanks t
 - /EcoGnome createshopsell _{ContextName}_  :   Same as CreateShop, but creates only the sell offers.
 - /EcoGnome createshopbuy _{ContextName}_   :   Same as CreateShop, but creates only the buy offers.
 
-  
+You can now sync your shops without typing commands, thanks to an interaction with the Store or through a button in the Store configuration page.
+
 ## Installation
 
-Download the latest EcoGnomeMod.dll file from [Release page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) and paste it in the folder Mods/ in your server
+Download the latest EcoGnomeMod.dll and StoreObject.cs file from [Release page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) and paste it in the folder Mods/UserCode in your server
 
 ## Contact
 Zangdar (Discord: #zangdar1111)  
