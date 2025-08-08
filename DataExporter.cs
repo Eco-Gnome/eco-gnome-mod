@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using Amazon.Runtime.Internal.Util;
 using Eco.Core.Utils;
 using Eco.Gameplay.DynamicValues;
 using Eco.Gameplay.Items;
@@ -55,7 +56,14 @@ public static class DataExporter
         {
             if (localizedString.ContainsKey(keyValue.Value)) continue;
 
-            localizedString.Add(keyValue.Value, Localizer.LocalizeString(name, keyValue.Key));
+            try
+            {
+                localizedString.Add(keyValue.Value, Localizer.LocalizeString(name, keyValue.Key));
+            }
+            catch (Exception)
+            {
+                Console.WriteLine($"Error in localization of {name} with value {keyValue.Value} language {keyValue.Key}");
+            }
         }
 
         return localizedString;
