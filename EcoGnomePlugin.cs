@@ -4,6 +4,7 @@ using Eco.Core.Plugins.Interfaces;
 using Eco.Core.Utils;
 using Eco.Gameplay.Players;
 using Eco.Mods.TechTree;
+using Eco.Shared.Localization;
 using Eco.Shared.Networking;
 
 namespace EcoGnomeMod;
@@ -59,7 +60,7 @@ public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitiali
 
     public string GetCategory()
     {
-        return "Mods";
+        return Localizer.DoStr("Mods");
     }
 
     public void Initialize(TimedTask timer)
