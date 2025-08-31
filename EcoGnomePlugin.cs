@@ -59,7 +59,7 @@ public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitiali
 
     public string GetCategory()
     {
-        return "Mods";
+        return Localizer.DoStr("Mods");
     }
 
     public void Initialize(TimedTask timer)
