@@ -174,7 +174,7 @@ public static class EcoGnomeChatCommand
 
     private static bool EnsuresFullAccess(User user, WorldObject target)
     {
-        if (!ServiceHolder<IAuthManager>.Obj.IsAuthorized(target, user, AccessType.FullAccess))
+        if (!ServiceHolder<IAuthManager>.Obj.IsAuthorized(target, user, AccessType.FullAccess, null, out _))
         {
             user.Player.Error(Localizer.DoStr("You're not authorized to do this."));
             return false;
