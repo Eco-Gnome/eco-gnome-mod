@@ -346,7 +346,7 @@ public class DynamicValueExported
             {
                 case ModuleModifiedValue moduleModifiedValue:
                 {
-                    this.Modifiers.Add(new ModifierExported(DynamicType.Module, moduleModifiedValue.SkillType?.Name ?? ""));
+                    this.Modifiers.Add(new ModifierExported(DynamicType.Module, moduleModifiedValue.SkillType?.Name ?? "", moduleModifiedValue.ValueType.ToString()));
                     break;
                 }
                 case TalentModifiedValue talentModifiedValue:
@@ -356,7 +356,7 @@ public class DynamicValueExported
                 }
                 case SkillModifiedValue skillModifiedValue:
                 {
-                    this.Modifiers.Add(new ModifierExported(DynamicType.Skill, skillModifiedValue.Skill.Name));
+                    this.Modifiers.Add(new ModifierExported(DynamicType.Skill, skillModifiedValue.Skill.Name, skillModifiedValue.ValueType.ToString()));
                     break;
                 }
                 case LayerModifiedValue layerModifiedValue:
@@ -370,14 +370,9 @@ public class DynamicValueExported
 }
 
 [JsonObject(MemberSerialization.OptIn)]
-public class ModifierExported
+public class ModifierExported(DynamicType dyn, string item, string valueType = "")
 {
-    [JsonProperty] public DynamicType DynamicType { get; set; }
-    [JsonProperty] public string Item { get; set; }
-
-    public ModifierExported(DynamicType dyn, string item)
-    {
-        this.DynamicType = dyn;
-        this.Item = item;
-    }
+    [JsonProperty] public DynamicType DynamicType { get; set; } = dyn;
+    [JsonProperty] public string Item { get; set; } = item;
+    [JsonProperty] public string ValueType { get; set; } = valueType;
 }
