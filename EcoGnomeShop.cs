@@ -1,4 +1,5 @@
-﻿using Eco.Gameplay.Components.Store;
+﻿using Eco.Core.Controller;
+using Eco.Gameplay.Components.Store;
 using Eco.Gameplay.Components.Store.Internal;
 using Eco.Gameplay.Items;
 using Eco.Gameplay.Players;
@@ -43,19 +44,38 @@ public static class EcoGnomeShop
 
     public static void CreateCategories(Player player, List<EcoGnomeCategory> ecoGnomePrices, StoreComponent storeComponent, OfferType offerType = OfferType.All)
     {
-        if (offerType == OfferType.Buy || offerType == OfferType.All)
+        if (offerType is OfferType.Buy or OfferType.All)
         {
-            foreach (var category in ecoGnomePrices.Where(p => p.OfferType == OfferType.Buy))
+            var egCategories = ecoGnomePrices.Where(p => p.OfferType == OfferType.Buy).ToList();
+            var existingCount = storeComponent.StoreData.BuyCategories.Count;
+
+            foreach (var category in egCategories)
             {
                 storeComponent.CreateCategoryWithOffers(player, category.Items.Where(i => Item.GetType(i.Name) is not null).Select(i => Item.GetID(Item.GetType(i.Name))).ToList(), true);
             }
+
+            var created = storeComponent.StoreData.BuyCategories.Skip(existingCount).ToList();
+            for (var i = 0; i < egCategories.Count; i++)
+            {
+                created[i].Name = egCategories[i].Name;
+                created[i].Changed("Name");
+            }
         }
 
-        if (offerType == OfferType.Sell|| offerType == OfferType.All)
+        if (offerType is OfferType.Sell or OfferType.All)
         {
-            foreach (var category in ecoGnomePrices.Where(p => p.OfferType == OfferType.Sell))
+            var egCategories = ecoGnomePrices.Where(p => p.OfferType == OfferType.Sell).ToList();
+            var existingCount = storeComponent.StoreData.SellCategories.Count;
+
+            foreach (var category in egCategories)
             {
                 storeComponent.CreateCategoryWithOffers(player, category.Items.Where(i => Item.GetType(i.Name) is not null).Select(i => Item.GetID(Item.GetType(i.Name))).ToList(), false);
+            }
+
+            var created = storeComponent.StoreData.SellCategories.Skip(existingCount).ToList();
+            for (var i = 0; i < egCategories.Count; i++)
+            {
+                created[i].Name = egCategories[i].Name;
             }
         }
     }

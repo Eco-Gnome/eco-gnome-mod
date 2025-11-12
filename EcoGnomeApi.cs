@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Eco.Mods.TechTree;
+using Newtonsoft.Json;
 
 namespace EcoGnomeMod;
 
@@ -61,15 +62,17 @@ public static class EcoGnomeApi
                 return prices ?? [];
             default:
                 throw new Exception(await response.Content.ReadAsStringAsync());
-        }    
+        }
     }
 
-    public static async Task<List<EcoGnomeCategory>> GetItemsToBuyAndSellAsync(string ecoServerId, string ecoUserId, string dataContext)
+    public static async Task<List<EcoGnomeCategory>> GetItemsToBuyAndSellAsync(string ecoServerId, string ecoUserId, string filterSkill, GroupBy groupBy, string dataContext)
     {
         using var httpClient = new HttpClient();
-        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/categories-items" +
+        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/categories-items-v2" +
                          $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
                          $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
+                         $"&filterSkill={Uri.EscapeDataString(filterSkill)}" +
+                         $"&groupBy={Uri.EscapeDataString(groupBy.ToString())}" +
                          $"&context={Uri.EscapeDataString(dataContext)}";
         var response = await httpClient.GetAsync(requestUrl);
 
@@ -83,7 +86,7 @@ public static class EcoGnomeApi
                 return prices ?? [];
             default:
                 throw new Exception(await response.Content.ReadAsStringAsync());
-        }    
+        }
     }
 }
 

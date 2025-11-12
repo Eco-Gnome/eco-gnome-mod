@@ -3,6 +3,7 @@ using Eco.Gameplay.Components.Store;
 using Eco.Gameplay.Objects;
 using Eco.Gameplay.Players;
 using Eco.Gameplay.Systems.Messaging.Chat.Commands;
+using Eco.Mods.TechTree;
 using Eco.Plugins.Networking;
 using Eco.Shared.IoC;
 using Eco.Shared.Items;
@@ -89,7 +90,7 @@ public static class EcoGnomeChatCommand
     }
 
     [ChatSubCommand("EcoGnome", "Add offers for all items in Eco Gnome, grouped in categories by skills. You can specify a context name if you don't want to retrieve the default context.", "egcreate", ChatAuthorizationLevel.User)]
-    public static async Task CreateShop(User user, INetObject target, string dataContext = "")
+    public static async Task CreateShop(User user, INetObject target, string filterSkill = "", int groupBy = 0, string dataContext = "")
     {
         if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
         if (!EnsuresFullAccess(user, worldObject)) return;
@@ -97,8 +98,8 @@ public static class EcoGnomeChatCommand
 
         await CatchApiError(async () =>
         {
-            var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), dataContext);
-            EcoGnomeShop.CreateCategories(user.Player, categories, storeComponent, OfferType.All);
+            var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), filterSkill, (GroupBy)groupBy, dataContext);
+            EcoGnomeShop.CreateCategories(user.Player, categories, storeComponent);
             EcoGnomeShop.SyncPrices(categories.SelectMany(c => c.Items).ToList(), storeComponent);
 
             user.Player.Msg(Localizer.DoStr("Shop offers successfully created."));
@@ -106,7 +107,7 @@ public static class EcoGnomeChatCommand
     }
 
     [ChatSubCommand("EcoGnome", "Same as CreateShop, but creates only the sell offers.", "egcreates", ChatAuthorizationLevel.User)]
-    public static async Task CreateShopSell(User user, INetObject target, string dataContext = "")
+    public static async Task CreateShopSell(User user, INetObject target, string filterSkill = "", int groupBy = 0, string dataContext = "")
     {
         if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
         if (!EnsuresFullAccess(user, worldObject)) return;
@@ -114,7 +115,7 @@ public static class EcoGnomeChatCommand
 
         await CatchApiError(async () =>
         {
-            var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), dataContext);
+            var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), filterSkill, (GroupBy)groupBy, dataContext);
             EcoGnomeShop.CreateCategories(user.Player, categories, storeComponent, OfferType.Sell);
             EcoGnomeShop.SyncPrices(categories.SelectMany(c => c.Items).ToList(), storeComponent, OfferType.Sell);
 
@@ -123,16 +124,15 @@ public static class EcoGnomeChatCommand
     }
 
     [ChatSubCommand("EcoGnome", "Same as CreateShop, but creates only the buy offers.", "egcreateb", ChatAuthorizationLevel.User)]
-    public static async Task CreateShopBuy(User user, INetObject target, string dataContext = "")
+    public static async Task CreateShopBuy(User user, INetObject target, string filterSkill = "", int groupBy = 0, string dataContext = "")
     {
         if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
         if (!EnsuresFullAccess(user, worldObject)) return;
         var storeComponent = worldObject.GetComponent<StoreComponent>();
 
-
         await CatchApiError(async () =>
         {
-            var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), dataContext);
+            var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), filterSkill, (GroupBy)groupBy, dataContext);
             EcoGnomeShop.CreateCategories(user.Player, categories, storeComponent, OfferType.Buy);
             EcoGnomeShop.SyncPrices(categories.SelectMany(c => c.Items).ToList(), storeComponent, OfferType.Buy);
 

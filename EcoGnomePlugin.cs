@@ -27,9 +27,9 @@ public class EcoGnomeConfig: Singleton<EcoGnomeConfig>
 
 public class EcoGnomeChatCommandHandler: IEcoGnomeChatCommand
 {
-    public async Task CreateShop(User user, INetObject target, string dataContext)
+    public async Task CreateShop(User user, INetObject target, string filterSkill, GroupBy groupBy, string dataContext)
     {
-        await EcoGnomeChatCommand.CreateShop(user, target, dataContext);
+        await EcoGnomeChatCommand.CreateShop(user, target, filterSkill, (int)groupBy, dataContext);
     }
 
     public async Task SyncShop(User user, INetObject target, string dataContext)
