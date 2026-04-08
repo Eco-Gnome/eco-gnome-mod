@@ -1,5 +1,5 @@
-﻿using Eco.Mods.TechTree;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
+using Eco.Mods.TechTree;
 
 namespace EcoGnomeMod;
 

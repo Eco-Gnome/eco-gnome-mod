@@ -1,6 +1,7 @@
 ﻿using System.Reflection;
-using Amazon.Runtime.Internal.Util;
 using Eco.Core.Utils;
+using Eco.Gameplay.Bonuses;
+using Eco.Gameplay.Components;
 using Eco.Gameplay.DynamicValues;
 using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
@@ -17,7 +18,7 @@ public static class DataExporter
     {
         try
         {
-            var allTalentGroups = typeof(TalentGroup).InstancesOfCreatableTypesParallel<TalentGroup>().ToArray();
+            var allTalentGroups = Item.AllItemsIncludingHidden.OfType<TalentGroup>().ToArray();
             var craftingTables = RecipeManager.AllRecipes.Where(r => r.Family?.CraftingTable is not null).Select(r => r.Family.CraftingTable).Distinct()
                 .ToList();
 
@@ -35,7 +36,7 @@ public static class DataExporter
                     where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
                     select new TagExported(tag)
                 ).ToList(),
-                RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe))).ToList()
+                RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe, TalentManager.AllTalents))).ToList()
             );
 
             File.WriteAllText("eco_gnome_data.json", JsonConvert.SerializeObject(data, options));
@@ -46,6 +47,43 @@ public static class DataExporter
 
             Console.WriteLine(e);
         }
+    }
+
+    public static readonly HashSet<BonusAction> RelevantActions = [BonusAction.ResourceCost, BonusAction.LaborCost, BonusAction.CraftTime, BonusAction.Yield];
+
+    public static List<(string TalentName, BonusAction Action)> FindMatchingCraftTalents(RecipeFamily recipeFamily, Recipe recipe, Talent[] allTalents)
+    {
+        var results = new List<(string, BonusAction)>();
+        var recipeSkillTypes = recipeFamily.RequiredSkills?.Select(s => s.SkillType).ToHashSet() ?? [];
+        var recipeType = recipeFamily.GetType();
+        var tableTypes = CraftingComponent.TablesForRecipe(recipeType)?.ToHashSet() ?? [];
+        var productTags = recipe.Products
+            .Where(p => p?.Item != null)
+            .SelectMany(p => p.Item.Tags())
+            .Select(t => t.Name)
+            .ToHashSet();
+
+        foreach (var talent in allTalents)
+        {
+            if (talent.Base) continue;
+            foreach (var bonus in talent.Bonuses)
+            {
+                var craftCause = bonus.Causes.OfType<CraftBonusCause>().FirstOrDefault();
+                if (craftCause == null || !RelevantActions.Contains(craftCause.Action)) continue;
+
+                if (craftCause.SkillTypes.Count > 0 && !craftCause.SkillTypes.Any(st => recipeSkillTypes.Contains(st)))
+                    continue;
+                if (craftCause.Recipes.Count > 0 && !craftCause.Recipes.Contains(recipeType))
+                    continue;
+                if (craftCause.CraftStationTypes.Count > 0 && !craftCause.CraftStationTypes.Any(ct => tableTypes.Any(tt => ct.IsAssignableFrom(tt))))
+                    continue;
+                if (craftCause.ItemTags.Count > 0 && !craftCause.ItemTags.Any(it => productTags.Contains(it)))
+                    continue;
+
+                results.Add((talent.GetType().Name, craftCause.Action));
+            }
+        }
+        return results;
     }
 
     public static Dictionary<string, string> GenerateLocalization(string name)
@@ -81,7 +119,7 @@ public class ExportedData
 
     public ExportedData(List<SkillExported> skills, List<ItemExported> items, List<TagExported> tags, List<RecipeExported> recipes)
     {
-        this.Version = 1; // version of the file, to be changed when a breaking change is done. Eco Gnome will refuse to import files with older version.
+        this.Version = 2; // version of the file, to be changed when a breaking change is done. Eco Gnome will refuse to import files with older version.
         this.Skills = skills;
         this.Items = items;
         this.Tags = tags;
@@ -105,7 +143,7 @@ public class RecipeExported
     [JsonProperty] public List<IngredientExported> Ingredients { get; set; }
     [JsonProperty] public List<ProductExported> Products { get; set; }
 
-    public RecipeExported(RecipeFamily recipeFamily, Recipe recipe)
+    public RecipeExported(RecipeFamily recipeFamily, Recipe recipe, Talent[] allTalents)
     {
         this.Name = recipe.GetType() != typeof(Recipe) ? recipe.GetType().Name : recipeFamily.GetType().Name;
         this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName.NotTranslated);
@@ -135,6 +173,15 @@ public class RecipeExported
         {
             this.Products.Add(new ProductExported(product));
         }
+
+        // Inject synthetic talent modifiers from the v13 Bonus system
+        var matchingTalents = DataExporter.FindMatchingCraftTalents(recipeFamily, recipe, allTalents);
+        foreach (var ing in this.Ingredients)
+            ing.Quantity.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.ResourceCost).Select(m => m.TalentName));
+        this.Labor.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.LaborCost).Select(m => m.TalentName));
+        this.CraftMinutes.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.CraftTime).Select(m => m.TalentName));
+        foreach (var prod in this.Products)
+            prod.Quantity.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.Yield).Select(m => m.TalentName));
     }
 }
 
@@ -274,23 +321,64 @@ public class TalentExported
     [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
     [JsonProperty] public float Value { get; set; }
     [JsonProperty] public int Level { get; set; }
+    [JsonProperty] public int MaxLevel { get; set; }
+    [JsonProperty] public float? Cap { get; set; }
+    [JsonProperty] public Dictionary<string, string> LocalizedDescription { get; set; }
 
     public TalentExported(Talent talent, TalentGroup talentGroup)
     {
         this.Name = talent.GetType().Name;
         this.TalentGroupName = talentGroup.GetType().Name;
-        if (talentGroup.GetType().GetCustomAttribute<LocDisplayNameAttribute>() is not null)
-        {
-            this.LocalizedName = DataExporter.GenerateLocalization(talentGroup.GetType().GetCustomAttribute<LocDisplayNameAttribute>()!.Name);
-        }
+        var groupType = talentGroup.GetType();
+        if (groupType.GetCustomAttribute<LocDisplayNameAttribute>() is not null)
+            this.LocalizedName = DataExporter.GenerateLocalization(groupType.GetCustomAttribute<LocDisplayNameAttribute>()!.Name);
         else
         {
             Console.WriteLine("No loc for " + talent.GetType().Name);
             this.LocalizedName = new Dictionary<string, string>();
         }
 
-        this.Value = talent.Value;
+        if (groupType.GetCustomAttribute<LocDescriptionAttribute>() is { } descAttr)
+            this.LocalizedDescription = DataExporter.GenerateLocalization(descAttr.Description);
+        else
+            this.LocalizedDescription = new Dictionary<string, string>();
+
         this.Level = talentGroup.Level;
+        this.MaxLevel = talentGroup.MaxTalentLevel;
+
+        // Extract value from bonus system — prefer ResourceCost bonus, else first crafting bonus
+        var craftBonuses = talent.Bonuses
+            .Where(b => b.Causes.OfType<CraftBonusCause>().Any(c => DataExporter.RelevantActions.Contains(c.Action)))
+            .ToList();
+
+        var preferredBonus = craftBonuses
+            .FirstOrDefault(b => b.Causes.OfType<CraftBonusCause>().Any(c => c.Action == BonusAction.ResourceCost))
+            ?? craftBonuses.FirstOrDefault();
+
+        if (preferredBonus != null)
+        {
+            var effect = preferredBonus.Effects.FirstOrDefault();
+            switch (effect)
+            {
+                case BonusEffectCappedMultiplicative capped:
+                    this.Value = capped.Value;
+                    this.Cap = capped.Cap;
+                    break;
+                case BonusEffectMultiplicative mult:
+                    this.Value = mult.Value;
+                    break;
+                case BonusEffectAdditive additive:
+                    this.Value = additive.Value;
+                    break;
+                default:
+                    this.Value = talent.Value;
+                    break;
+            }
+        }
+        else
+        {
+            this.Value = talent.Value; // Legacy talents (FocusedWorkflow, etc.)
+        }
     }
 }
 
@@ -364,6 +452,19 @@ public class DynamicValueExported
                     this.Modifiers.Add(new ModifierExported(DynamicType.Layer, layerModifiedValue.Layer));
                     break;
                 }
+            }
+        }
+    }
+
+    public void InjectTalentModifiersIfMissing(IEnumerable<string> talentNames)
+    {
+        var existing = this.Modifiers.Where(m => m.DynamicType.ToString() == "Talent").Select(m => m.Item).ToHashSet();
+        foreach (var name in talentNames)
+        {
+            if (!existing.Contains(name))
+            {
+                this.Modifiers.Add(new ModifierExported(DynamicType.Talent, name));
+                existing.Add(name);
             }
         }
     }
