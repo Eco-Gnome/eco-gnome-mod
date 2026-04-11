@@ -1,13 +1,18 @@
 ﻿using Eco.Gameplay.Auth;
+using Eco.Gameplay.Components;
 using Eco.Gameplay.Components.Store;
+using Eco.Gameplay.Items;
 using Eco.Gameplay.Objects;
 using Eco.Gameplay.Players;
+using Eco.Gameplay.Property;
+using Eco.Gameplay.Rooms;
 using Eco.Gameplay.Systems.Messaging.Chat.Commands;
 using Eco.Mods.TechTree;
 using Eco.Plugins.Networking;
 using Eco.Shared.IoC;
 using Eco.Shared.Items;
 using Eco.Shared.Localization;
+using Eco.Shared.Math;
 using Eco.Shared.Networking;
 
 namespace EcoGnomeMod;
@@ -140,6 +145,34 @@ public static class EcoGnomeChatCommand
         }, user);
     }
 
+    [ChatSubCommand("EcoGnome", "Sync EcoGnome prices on all for-sale objects around you. Default radius is 10.", "egsyncarea", ChatAuthorizationLevel.User)]
+    public static async Task SyncArea(User user, int radius = 10, string dataContext = "")
+    {
+        var forSaleObjects = GetAuthorizedForSaleObjects(user, ServiceHolder<IWorldObjectManager>.Obj.GetObjectsWithin(user.Position, radius));
+        await SyncForSalePrices(user, forSaleObjects, dataContext);
+    }
+
+    [ChatSubCommand("EcoGnome", "Sync EcoGnome prices on all for-sale objects in the room you're standing in.", "egsyncroom", ChatAuthorizationLevel.User)]
+    public static async Task SyncRoom(User user, string dataContext = "")
+    {
+        var room = RoomData.Obj.GetNearestRoom(user.Position);
+        if (room is null) { user.Player.Error(Localizer.DoStr("You're not in a room.")); return; }
+
+        var forSaleObjects = GetAuthorizedForSaleObjects(user, room.RoomStats.ContainedWorldObjects);
+        await SyncForSalePrices(user, forSaleObjects, dataContext);
+    }
+
+    [ChatSubCommand("EcoGnome", "Sync EcoGnome prices on all for-sale objects on the deed you're standing on.", "egsyncdeed", ChatAuthorizationLevel.User)]
+    public static async Task SyncDeed(User user, string dataContext = "")
+    {
+        var deed = PropertyManager.GetDeedWorldPos(user.Position.XZi());
+        if (deed is null) { user.Player.Error(Localizer.DoStr("You're not standing on a claimed property.")); return; }
+
+        var worldObjects = deed.OwnedObjects.Select(h => h.OwnedObject as WorldObject).Where(o => o is not null);
+        var forSaleObjects = GetAuthorizedForSaleObjects(user, worldObjects!);
+        await SyncForSalePrices(user, forSaleObjects, dataContext);
+    }
+
     [ChatSubCommand("EcoGnome", "Open a browser that allows to join Eco Gnome Server.", "egjoin", ChatAuthorizationLevel.User)]
     public static void Join(User user, INetObject target)
     {
@@ -181,6 +214,37 @@ public static class EcoGnomeChatCommand
         }
 
         return true;
+    }
+
+    private static List<ForSaleComponent> GetAuthorizedForSaleObjects(User user, IEnumerable<WorldObject> worldObjects)
+    {
+        return worldObjects
+            .Select(wo => wo.GetComponent<ForSaleComponent>())
+            .Where(fs => fs is not null && fs.ForSale)
+            .Where(fs => ServiceHolder<IAuthManager>.Obj.IsAuthorized(fs.Parent, user, AccessType.FullAccess, null, out _))
+            .ToList();
+    }
+
+    private static async Task SyncForSalePrices(User user, List<ForSaleComponent> forSaleObjects, string dataContext)
+    {
+        if (forSaleObjects.Count == 0) { user.Player.Error(Localizer.DoStr("No authorized for-sale objects found.")); return; }
+
+        await CatchApiError(async () =>
+        {
+            var prices = await EcoGnomeApi.GetUserPricesAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), dataContext);
+            var updated = 0;
+            foreach (var forSale in forSaleObjects)
+            {
+                var itemName = (forSale.Parent.CreatingItem as Item)?.Name;
+                if (itemName is null) continue;
+                var match = prices.Find(p => p.Name == itemName);
+                if (match is null) continue;
+                forSale.Price = (float)match.Price;
+                updated++;
+            }
+
+            user.Player.Msg(Localizer.DoStr($"Prices updated on {updated}/{forSaleObjects.Count} for-sale object(s)."));
+        }, user);
     }
 
     private static async Task CatchApiError(Func<Task> action, User user)

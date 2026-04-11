@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Eco.Gameplay.Items;
 using Eco.Mods.TechTree;
 
 namespace EcoGnomeMod;
@@ -121,6 +122,8 @@ public class EcoGnomeItem(string name, decimal price, int minDurability = -1, in
 
     [JsonProperty(nameof(MaxIntegrity))]
     public int MaxIntegrity { get; set; } = maxIntegrity;
+
+    [JsonIgnore] public bool IsTag => Item.GetType(this.Name) is null && TagManager.Tag(this.Name) is not null;
 }
 
 public class EcoApiException(string message) : Exception(message);

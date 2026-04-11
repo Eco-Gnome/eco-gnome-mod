@@ -43,10 +43,8 @@ namespace Eco.Mods.TechTree
         public override WorldObjectComponentClientAvailability Availability => WorldObjectComponentClientAvailability.Always;
         [SyncToView] public override string IconName => "StoreComponent";
 
-        [Eco, Sort(1)] public string ContextName { get; set; } = "";
-
-        [Autogen, RPC, Sort(2), UITypeName("BigButton")] public void SyncWithEcoGnome(Player player) => this.SyncShop(player, default, default);
-
+        [Autogen, RPC, Sort(1), UITypeName("BigButton")] public void SyncWithEcoGnome(Player player) => this.SyncShop(player, default, default);
+        [Eco, Sort(2)] public string ContextName { get; set; } = "";
         [Eco, Sort(3)] public GroupBy GroupBy { get; set; } = GroupBy.None;
         [Eco, Sort(4), AllowEmpty] public GamePickerList FilterSkills { get; set; } = GamePickerListFactory.Create(typeof(Skill));
 
