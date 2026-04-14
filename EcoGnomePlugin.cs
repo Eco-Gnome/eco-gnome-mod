@@ -27,14 +27,19 @@ public class EcoGnomeConfig: Singleton<EcoGnomeConfig>
 
 public class EcoGnomeChatCommandHandler: IEcoGnomeChatCommand
 {
-    public async Task CreateShop(User user, INetObject target, string filterSkill, GroupBy groupBy, string dataContext)
+    public async Task CreateShop(User user, INetObject target, string filterSkill, GroupBy groupBy, string dataContext, OfferType scope, bool syncTags)
     {
-        await EcoGnomeChatCommand.CreateShop(user, target, filterSkill, (int)groupBy, dataContext);
+        await EcoGnomeChatCommand.CreateShop(user, target, filterSkill, (int)groupBy, dataContext, scope, syncTags);
     }
 
-    public async Task SyncShop(User user, INetObject target, string dataContext)
+    public async Task SyncShop(User user, INetObject target, string dataContext, OfferType scope, bool syncTags)
     {
-        await EcoGnomeChatCommand.SyncShop(user, target, dataContext);
+        await EcoGnomeChatCommand.SyncShop(user, target, dataContext, scope, syncTags);
+    }
+
+    public async Task SyncArea(User user, int radius, string dataContext)
+    {
+        await EcoGnomeChatCommand.SyncArea(user, radius, dataContext);
     }
 }
 

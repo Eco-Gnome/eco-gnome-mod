@@ -12,6 +12,7 @@ using Eco.Plugins.Networking;
 using Eco.Shared.IoC;
 using Eco.Shared.Items;
 using Eco.Shared.Localization;
+using Eco.Shared.Logging;
 using Eco.Shared.Math;
 using Eco.Shared.Networking;
 
@@ -49,8 +50,7 @@ public static class EcoGnomeChatCommand
         }, user);
     }
 
-    [ChatSubCommand("EcoGnome", "Apply your EcoGnome prices on your targeted shop. It doesn't add or remove items, only edit prices of matching items. Specify a context name if you want don't want to retrieve the default context.", "egsync", ChatAuthorizationLevel.User)]
-    public static async Task SyncShop(User user, INetObject target, string dataContext = "")
+    public static async Task SyncShop(User user, INetObject target, string dataContext, OfferType scope, bool syncTags)
     {
         if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
         if (!EnsuresFullAccess(user, worldObject)) return;
@@ -58,45 +58,15 @@ public static class EcoGnomeChatCommand
         await CatchApiError(async () =>
         {
             var prices = await EcoGnomeApi.GetUserPricesAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), dataContext);
-            EcoGnomeShop.SyncPrices(prices, ((WorldObject)target).GetComponent<StoreComponent>());
+            EcoGnomeShop.SyncPrices(prices, ((WorldObject)target).GetComponent<StoreComponent>(), scope, syncTags);
 
-            user.Player.Msg(Localizer.DoStr("Sell & Buy prices successfully synchronized."));
+            user.Player.Msg(Localizer.DoStr($"{ScopeLabel(scope)} prices successfully synchronized."));
         }, user);
     }
 
-    [ChatSubCommand("EcoGnome", "Same as SyncShop, but only applies on buys categories.", "egsyncb", ChatAuthorizationLevel.User)]
-    public static async Task SyncShopBuys(User user, INetObject target, string dataContext = "")
+    public static async Task CreateShop(User user, INetObject target, string filterSkill, int groupBy, string dataContext, OfferType scope, bool syncTags)
     {
-        if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
-        if (!EnsuresFullAccess(user, worldObject)) return;
-
-        await CatchApiError(async () =>
-        {
-            var prices = await EcoGnomeApi.GetUserPricesAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), dataContext);
-            EcoGnomeShop.SyncPrices(prices, ((WorldObject)target).GetComponent<StoreComponent>(), OfferType.Buy);
-
-            user.Player.Msg(Localizer.DoStr("Buy prices successfully synchronized."));
-        }, user);
-    }
-
-    [ChatSubCommand("EcoGnome", "Same as SyncShop, but only applies on sells categories.", "egsyncs", ChatAuthorizationLevel.User)]
-    public static async Task SyncShopSells(User user, INetObject target, string dataContext = "")
-    {
-        if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
-        if (!EnsuresFullAccess(user, worldObject)) return;
-
-        await CatchApiError(async () =>
-        {
-            var prices = await EcoGnomeApi.GetUserPricesAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), dataContext);
-            EcoGnomeShop.SyncPrices(prices, ((WorldObject)target).GetComponent<StoreComponent>(), OfferType.Sell);
-
-            user.Player.Msg(Localizer.DoStr("Sell prices successfully synchronized."));
-        }, user);
-    }
-
-    [ChatSubCommand("EcoGnome", "Add offers for all items in Eco Gnome, grouped in categories by skills. You can specify a context name if you don't want to retrieve the default context.", "egcreate", ChatAuthorizationLevel.User)]
-    public static async Task CreateShop(User user, INetObject target, string filterSkill = "", int groupBy = 0, string dataContext = "")
-    {
+        Log.WriteLine(Localizer.DoStr($"[EcoGnome] CreateShop chat command: scope={scope}, syncTags={syncTags}"));
         if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
         if (!EnsuresFullAccess(user, worldObject)) return;
         var storeComponent = worldObject.GetComponent<StoreComponent>();
@@ -104,53 +74,25 @@ public static class EcoGnomeChatCommand
         await CatchApiError(async () =>
         {
             var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), filterSkill, (GroupBy)groupBy, dataContext);
-            EcoGnomeShop.CreateCategories(user.Player, categories, storeComponent);
-            EcoGnomeShop.SyncPrices(categories.SelectMany(c => c.Items).ToList(), storeComponent);
+            EcoGnomeShop.SyncCategories(user.Player, categories, storeComponent, scope, syncTags);
+            EcoGnomeShop.SyncPrices(categories.SelectMany(c => c.Items).ToList(), storeComponent, scope, syncTags);
 
-            user.Player.Msg(Localizer.DoStr("Shop offers successfully created."));
+            user.Player.Msg(Localizer.DoStr($"{ScopeLabel(scope)} offers successfully synchronized."));
         }, user);
     }
 
-    [ChatSubCommand("EcoGnome", "Same as CreateShop, but creates only the sell offers.", "egcreates", ChatAuthorizationLevel.User)]
-    public static async Task CreateShopSell(User user, INetObject target, string filterSkill = "", int groupBy = 0, string dataContext = "")
-    {
-        if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
-        if (!EnsuresFullAccess(user, worldObject)) return;
-        var storeComponent = worldObject.GetComponent<StoreComponent>();
-
-        await CatchApiError(async () =>
-        {
-            var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), filterSkill, (GroupBy)groupBy, dataContext);
-            EcoGnomeShop.CreateCategories(user.Player, categories, storeComponent, OfferType.Sell);
-            EcoGnomeShop.SyncPrices(categories.SelectMany(c => c.Items).ToList(), storeComponent, OfferType.Sell);
-
-            user.Player.Msg(Localizer.DoStr("Shop sell offers successfully created."));
-        }, user);
-    }
-
-    [ChatSubCommand("EcoGnome", "Same as CreateShop, but creates only the buy offers.", "egcreateb", ChatAuthorizationLevel.User)]
-    public static async Task CreateShopBuy(User user, INetObject target, string filterSkill = "", int groupBy = 0, string dataContext = "")
-    {
-        if (!EnsuresIsWorldObjectWithStoreComponent(user, target, out var worldObject)) return;
-        if (!EnsuresFullAccess(user, worldObject)) return;
-        var storeComponent = worldObject.GetComponent<StoreComponent>();
-
-        await CatchApiError(async () =>
-        {
-            var categories = await EcoGnomeApi.GetItemsToBuyAndSellAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), filterSkill, (GroupBy)groupBy, dataContext);
-            EcoGnomeShop.CreateCategories(user.Player, categories, storeComponent, OfferType.Buy);
-            EcoGnomeShop.SyncPrices(categories.SelectMany(c => c.Items).ToList(), storeComponent, OfferType.Buy);
-
-            user.Player.Msg(Localizer.DoStr("Shop buy offers successfully created."));
-        }, user);
-    }
-
-    [ChatSubCommand("EcoGnome", "Sync EcoGnome prices on all for-sale objects around you. Default radius is 10.", "egsyncarea", ChatAuthorizationLevel.User)]
-    public static async Task SyncArea(User user, int radius = 10, string dataContext = "")
+    public static async Task SyncArea(User user, int radius, string dataContext)
     {
         var forSaleObjects = GetAuthorizedForSaleObjects(user, ServiceHolder<IWorldObjectManager>.Obj.GetObjectsWithin(user.Position, radius));
         await SyncForSalePrices(user, forSaleObjects, dataContext);
     }
+
+    private static string ScopeLabel(OfferType scope) => scope switch
+    {
+        OfferType.Buy  => "Buy",
+        OfferType.Sell => "Sell",
+        _              => "Sell & Buy",
+    };
 
     [ChatSubCommand("EcoGnome", "Sync EcoGnome prices on all for-sale objects in the room you're standing in.", "egsyncroom", ChatAuthorizationLevel.User)]
     public static async Task SyncRoom(User user, string dataContext = "")
