@@ -2,28 +2,59 @@
 
 ## Optional server mod of [Eco Gnome](https://eco-gnome.com)
 
-This repository contains the Data Extractor part of [Eco Gnome](https://eco-gnome.com).   
-It allows to extract your specific server configuration (skills, recipes, items, ...) to visualize and calculate their price in [Eco Gnome](https://eco-gnome.com) website.  
-Extracted file will be created in your server file root folder: `eco_gnome_data.json`
+This repository contains the Data Extractor part of [Eco Gnome](https://eco-gnome.com).
+It allows to extract your specific server configuration (skills, recipes, items, ...) to visualize and calculate their prices on the [Eco Gnome](https://eco-gnome.com) website.
+The extracted file is created in your server root folder: `eco_gnome_data.json`.
 
-It allows to synchronize prices between your shops and EcoGnome website thanks to three commands:
-- /EcoGnome registerserver **{JoinCode}**   :   To be launched by admin during the setup of the server
-- /EcoGnome registeruser **{SecretId}**     :   To be launched by all users only one time
-- /EcoGnome open                            :   Opens Eco Gnome in your default browser. If the server is registered and you have joined it, it switches you to this server.
-- /EcoGnome join                            :   Opens Eco Gnome in your default browser, and joins the server if it has been registered.
-- /EcoGnome syncshop _{ContextName}_        :   Apply your EcoGnome prices on your targeted shop. It doesn't add or remove items, only edit prices of matching items. You can specify a Context Name to retrieve a specific context, or leave it blank to retrieve the default one.
-- /EcoGnome syncshopsell _{ContextName}_    :   Same as syncshop, but for sell offers only.
-- /EcoGnome syncshopbuy _{ContextName}_     :   Same as syncshop, but for buy offers only
-- /EcoGnome createshop _{ContextName}_      :   Add offers for all items in Eco Gnome, grouped in categories by skills. You can specify a context name if you don't want to retrieve the default context.
-- /EcoGnome createshopsell _{ContextName}_  :   Same as CreateShop, but creates only the sell offers.
-- /EcoGnome createshopbuy _{ContextName}_   :   Same as CreateShop, but creates only the buy offers.
+It also lets users synchronize prices between their Eco shops and Eco Gnome, either through chat commands or directly from the in-game Store UI.
 
-You can now sync your shops without typing commands, thanks to an interaction with the Store or through a button in the Store configuration page.
+## Chat commands
+
+### Setup
+
+- `/EcoGnome registerserver {JoinCode}` _(admin, alias `egserver`)_ — Register the server on Eco Gnome. To be launched once during server setup.
+- `/EcoGnome registeruser {SecretId}` _(alias `eguser`)_ — Register your Eco Gnome account on this server. To be launched once per user.
+- `/EcoGnome export` _(admin)_ — Re-export the server data to `eco_gnome_data.json`. The export also runs automatically on server start.
+
+### Open Eco Gnome
+
+- `/EcoGnome open` _(alias `egopen`)_ — Open the Eco Gnome website in your default browser. If the server is registered and you have joined it, you will be switched to this server.
+- `/EcoGnome join` _(alias `egjoin`)_ — Open Eco Gnome and join this server (if it has been registered).
+
+### For-sale objects bulk sync
+
+- `/EcoGnome syncroom {ContextName}` _(alias `egsyncroom`)_ — Update the price of every authorized for-sale world object in the room you are standing in, using your Eco Gnome prices. `ContextName` is optional; leave it blank to use the default context.
+- `/EcoGnome syncdeed {ContextName}` _(alias `egsyncdeed`)_ — Same as `syncroom`, but applied to every authorized for-sale object on the deed you are standing on.
+
+> Shop sync commands (`syncshop`, `createshop`, ...) have been replaced by the in-game **Eco Gnome** component on stores — see below.
+
+## In-game Eco Gnome component
+
+Stores (`StoreObject`, `WoodShopCartObject`) now expose an **Eco Gnome** tab with the following options and buttons:
+
+- **Context Name** — Name of the Eco Gnome context to pull prices from. Leave empty to use the default context.
+- **Scope** — Which side of the offers the buttons act on: `All` (buys + sells), `Buy` only, or `Sell` only.
+- **Sync Tags** — When set to `Yes`, tag-based offers are also created/updated. Set to `No` to leave existing tag offers untouched.
+- **Sync Prices** _(button)_ — Update the prices of offers already present in the store from your Eco Gnome prices. Does not add or remove offers. Honors **Scope** and **Sync Tags**.
+- **Group By** — How offers are grouped into categories when new ones are created by **Sync Offers** (`None`, `Margin`, `Skill`).
+- **Filter Skills** — Restrict **Sync Offers** to items tied to these skills. Leave empty to include every skill.
+- **Sync Offers** _(button)_ — Full sync: adds missing items/tags, updates prices of existing ones, and removes offers no longer tracked in Eco Gnome. Honors **Scope** and **Sync Tags**.
+- **For Sale Sync Radius** — Radius (in blocks) used by the **Sync For Sale Area** button to find for-sale objects around the store.
+- **Sync For Sale Area** _(button)_ — Update the prices of every for-sale world object around this store (within the configured radius) from your Eco Gnome prices.
+
+A shortcut interaction is also available: **Shift + Right-click** on a store triggers **Sync Prices with Eco Gnome** using the component's current settings.
+
+## Configuration
+
+The plugin creates a config file `Configs/EcoGnome.eco` with:
+
+- `EcoGnomeUrl` — Default `https://eco-gnome.com`. URL used to talk to the Eco Gnome API.
+- `EcoGnomeUrlReverseProxy` — Optional. When set, this URL is used for the user-facing links opened by `/EcoGnome open` and `/EcoGnome join` (useful when Eco Gnome is hosted behind a reverse proxy).
 
 ## Installation
 
-Download the latest EcoGnomeMod.dll and StoreObject.cs file from [Release page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) and paste it in the folder Mods/UserCode in your server
+Download the latest `EcoGnomeMod.dll` and `StoreObject.cs` from the [Releases page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) and drop them in `Mods/UserCode` in your server.
 
 ## Contact
-Zangdar (Discord: #zangdar1111)  
-Joridan (Discord: #joridan)
+Zangdar (Discord: `#zangdar1111`)
+Joridan (Discord: `#joridan`)
