@@ -10,6 +10,7 @@ using Eco.Gameplay.Items;
 using Eco.Gameplay.Items.Recipes;
 using Eco.Gameplay.Modules;
 using Eco.Gameplay.Players;
+using Eco.Gameplay.Property;
 using Eco.Gameplay.Skills;
 using Eco.Gameplay.Systems.EcoMarketplace;
 using Eco.Shared.Localization;
@@ -42,7 +43,8 @@ public static class DataExporter
                     where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
                     select new TagExported(tag)
                 ).ToList(),
-                RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe, TalentManager.AllTalents))).ToList()
+                RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe, TalentManager.AllTalents))).ToList(),
+                ModuleSlotRegistry.All.Select(slot => new ModuleSlotExported(slot)).ToList()
             );
 
             File.WriteAllText("eco_gnome_data.json", JsonConvert.SerializeObject(data, options));
@@ -78,6 +80,8 @@ public static class DataExporter
                 if (craftCause == null || !RelevantActions.Contains(craftCause.Action)) continue;
 
                 if (craftCause.SkillTypes.Count > 0 && !craftCause.SkillTypes.Any(st => recipeSkillTypes.Contains(st)))
+                    continue;
+                if (craftCause.ExcludedSkillTypes.Count > 0 && craftCause.ExcludedSkillTypes.Any(st => recipeSkillTypes.Contains(st)))
                     continue;
                 if (craftCause.Recipes.Count > 0 && !craftCause.Recipes.Contains(recipeType))
                     continue;
@@ -122,14 +126,31 @@ public class ExportedData
     [JsonProperty] public List<ItemExported> Items { get; set; }
     [JsonProperty] public List<TagExported> Tags { get; set; }
     [JsonProperty] public List<RecipeExported> Recipes { get; set; }
+    [JsonProperty] public List<ModuleSlotExported> ModuleSlots { get; set; }
 
-    public ExportedData(List<SkillExported> skills, List<ItemExported> items, List<TagExported> tags, List<RecipeExported> recipes)
+    public ExportedData(List<SkillExported> skills, List<ItemExported> items, List<TagExported> tags, List<RecipeExported> recipes, List<ModuleSlotExported> moduleSlots)
     {
-        this.Version = 3; // version of the file, to be changed when a breaking change is done. Eco Gnome will refuse to import files with older version.
+        this.Version = 4; // version of the file, to be changed when a breaking change is done. Eco Gnome will refuse to import files with older version.
         this.Skills = skills;
         this.Items = items;
         this.Tags = tags;
         this.Recipes = recipes;
+        this.ModuleSlots = moduleSlots;
+    }
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public class ModuleSlotExported
+{
+    [JsonProperty] public string Name { get; set; }
+    [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
+    [JsonProperty] public int SortOrder { get; set; }
+
+    public ModuleSlotExported(ModuleSlotDefinition slot)
+    {
+        this.Name = slot.TagName;
+        this.LocalizedName = DataExporter.GenerateLocalization(slot.DisplayName.NotTranslated);
+        this.SortOrder = slot.SortOrder;
     }
 }
 
@@ -227,11 +248,12 @@ public class ItemExported
     [JsonProperty] public string Name { get; set; }
     [JsonProperty] public Dictionary<string, string> LocalizedName { get; set; }
     [JsonProperty] public bool? IsPluginModule { get; set; }
-    [JsonProperty] public string? PluginType { get; set; }
-    [JsonProperty] public float? PluginModulePercent { get; set; }
-    [JsonProperty] public string? PluginModuleSkill { get; set; }
-    [JsonProperty] public float? PluginModuleSkillPercent { get; set; }
+    [JsonProperty] public string? ModuleSlot { get; set; }                    //Slot tag this module installs into (e.g. "BasicModule", "SpecialtyModule"). See top-level ModuleSlots.
+    [JsonProperty] public List<BonusExported>? ModuleBonuses { get; set; }    //Resolved bonuses this module applies while installed (slot defaults already folded in).
+    [JsonProperty] public float? ModuleMaterialTierBump { get; set; }         //Added to the host table's required room material tier while this module is installed.
+    [JsonProperty] public RoomRequirementsExported? RoomRequirements { get; set; }
     [JsonProperty] public bool? IsCraftingTable { get; set; }
+    [JsonProperty] public string[]? CraftingTableModuleSlots { get; set; }    //Slot tags this table exposes; one module of each slot can be installed simultaneously.
     [JsonProperty] public string[]? CraftingTablePluginModules { get; set; }
     [JsonProperty] public float? FuelCalories { get; set; }       //Calorie value when burned as fuel.
     [JsonProperty] public string[]? AcceptedFuelTags { get; set; } //For WorldObjectItems with a FuelSupplyComponent: tag names of fuels they accept.
@@ -257,26 +279,24 @@ public class ItemExported
 
             this.AcceptedFuelTags = ReadFuelTagListFromWorldObject(worldObjectItem.WorldObjectType);
             this.FuelConsumptionPerSecond = ReadFuelConsumptionRate(worldObjectItem.WorldObjectType);
+            this.RoomRequirements = RoomRequirementsExported.From(worldObjectItem.WorldObjectType);
         }
 
-        if (item is EfficiencyModule efficiencyModule)
+        if (item is PluginModule pluginModule)
         {
             this.IsPluginModule = true;
-            this.PluginType = (efficiencyModule.ModuleTypes & ModuleTypes.ResourceEfficiency) != 0 && (efficiencyModule.ModuleTypes & ModuleTypes.SpeedEfficiency) != 0
-                ? "Resource&Speed"
-                : (efficiencyModule.ModuleTypes & ModuleTypes.ResourceEfficiency) != 0
-                    ? "Resource"
-                    : (efficiencyModule.ModuleTypes & ModuleTypes.SpeedEfficiency) != 0
-                        ? "Speed"
-                        : null;
-            this.PluginModulePercent = efficiencyModule.GenericMultiplier;
-            this.PluginModuleSkill = efficiencyModule.SkillType?.Name ?? "";
-            this.PluginModuleSkillPercent = efficiencyModule.SkillType is not null ? efficiencyModule.SkillMultiplier : null;
+            this.ModuleSlot = item.Tags().Select(t => t.Name).FirstOrDefault(name => ModuleSlotRegistry.Get(name) is not null);
+            this.ModuleBonuses = pluginModule.Bonuses.SelectMany(BonusExported.FromBonus).ToList();
+            this.ModuleMaterialTierBump = pluginModule.MaterialTierBump > 0f ? pluginModule.MaterialTierBump : null;
         }
 
         if (!craftingTables.Contains(item)) return;
 
         this.IsCraftingTable = true;
+
+        if (item is WorldObjectItem tableItem && ItemAttribute.Has<AllowPluginModulesAttribute>(item.Type))
+            this.CraftingTableModuleSlots = ModuleSlotRegistry.SlotsForTable(tableItem.WorldObjectType).Select(s => s.TagName).ToArray();
+
         var stackables = ItemAttribute.Get<AllowPluginModulesAttribute>(item.Type)?.GetStackables();
 
         if (stackables == null) return;
@@ -449,6 +469,28 @@ public class HousingExported
 }
 
 [JsonObject(MemberSerialization.OptIn)]
+public class RoomRequirementsExported
+{
+    [JsonProperty] public float? MaterialTier { get; set; }        //Required average room material tier (base value, before module bumps).
+    [JsonProperty] public int? Volume { get; set; }                //Free room volume (m³) the object consumes.
+    [JsonProperty] public bool? RequiresContainment { get; set; }  //Must be placed inside a valid room.
+
+    public static RoomRequirementsExported? From(Type worldObjectType)
+    {
+        var requirements = RoomRequirements.Get(worldObjectType)?.Requirements;
+        if (requirements is not { Length: > 0 }) return null;
+
+        var volume = requirements.OfType<RequireRoomVolumeAttribute>().Sum(r => r.Volume);
+        return new RoomRequirementsExported
+        {
+            MaterialTier        = requirements.OfType<RequireRoomMaterialTierAttribute>().Select(r => (float?)r.Tier).Max(),
+            Volume              = volume > 0 ? volume : null,
+            RequiresContainment = requirements.OfType<RequireRoomContainmentAttribute>().Any() ? true : null,
+        };
+    }
+}
+
+[JsonObject(MemberSerialization.OptIn)]
 public class TagExported
 {
     [JsonProperty] public string Name { get; set; }
@@ -499,7 +541,7 @@ public class TalentExported
     [JsonProperty] public int Level { get; set; }
     [JsonProperty] public int MaxLevel { get; set; }
     [JsonProperty] public Dictionary<string, string> LocalizedDescription { get; set; }
-    [JsonProperty] public List<TalentBonusExported> Bonuses { get; set; }
+    [JsonProperty] public List<BonusExported> Bonuses { get; set; }
 
     public TalentExported(Talent talent, TalentGroup talentGroup)
     {
@@ -522,45 +564,109 @@ public class TalentExported
         this.Level = talentGroup.Level;
         this.MaxLevel = talentGroup.MaxTalentLevel;
 
-        this.Bonuses = talent.Bonuses
-            .SelectMany(b => b.Causes.OfType<CraftBonusCause>()
-                .Where(c => DataExporter.RelevantActions.Contains(c.Action))
-                .SelectMany(c => b.Effects.Select(e => TalentBonusExported.From(c, e))))
-            .Where(b => b is not null)
-            .ToList()!;
+        this.Bonuses = talent.Bonuses.SelectMany(BonusExported.FromBonus).ToList();
     }
 }
 
 [JsonObject(MemberSerialization.OptIn)]
-public class TalentBonusExported
+public class BonusExported
 {
     [JsonProperty] public required string Action { get; set; }      //BonusAction (ResourceCost, LaborCost, CraftTime, Yield).
-    [JsonProperty] public required string EffectType { get; set; }  //Multiplicative, CappedMultiplicative, Additive, Override.
+    [JsonProperty] public required string EffectType { get; set; }  //Multiplicative, CappedMultiplicative, Additive, AdditivePercent, Override, Chance, TieredMultiplicative.
     [JsonProperty] public float Value { get; set; }
-    [JsonProperty] public float? Cap { get; set; }
-    [JsonProperty] public string[]? ItemTags { get; set; } //Recipe-scope filter: any product carrying one of these tags triggers the bonus. Null = no tag filter.
+    [JsonProperty] public float? Cap { get; set; }                  //CappedMultiplicative only: the value can't reduce below base × Cap.
+    [JsonProperty] public float? Chance { get; set; }               //Chance only: probability of adding Value on each craft.
+    [JsonProperty] public float[]? Levels { get; set; }             //TieredMultiplicative only: multiplier per talent level (index 0 = level 1); reuse the last entry past the end.
+    [JsonProperty] public string[]? SkillTypes { get; set; }         //Filter: recipe's required skill must be one of these. Null = no filter.
+    [JsonProperty] public string[]? ExcludedSkillTypes { get; set; } //Filter: recipes requiring one of these skills are excluded. Null = no exclusion.
+    [JsonProperty] public string[]? ItemTags { get; set; }           //Recipe-scope filter: any product carrying one of these tags triggers the bonus. Null = no tag filter.
 
-    public static TalentBonusExported? From(CraftBonusCause cause, BonusEffect effect)
+    /// <summary>Flattens a Bonus into one entry per (craft cause, effect) pair. Non-craft causes and effects that can't map to a flat price formula are skipped.</summary>
+    public static IEnumerable<BonusExported> FromBonus(Bonus bonus)
     {
-        var (effectType, value, cap) = effect switch
+        foreach (var cause in bonus.Causes)
         {
-            BonusEffectCappedMultiplicative capped => ("CappedMultiplicative", capped.Value, (float?)capped.Cap),
-            BonusEffectMultiplicative mult         => ("Multiplicative",       mult.Value,   (float?)null),
-            BonusEffectAdditive additive           => ("Additive",             additive.Value, (float?)null),
-            BonusEffectOverride ovr                => ("Override",             ovr.Value,    (float?)null),
-            _                                      => (null, 0f, (float?)null),
-        };
-        if (effectType == null) return null;
+            var (action, craftCause) = cause switch
+            {
+                CraftBonusCause craft => (craft.Action, craft),
+                ActionCause simple    => (simple.Action, null),
+                _                     => (BonusAction.None, (CraftBonusCause?)null),
+            };
+            if (!DataExporter.RelevantActions.Contains(action)) continue;
 
-        return new TalentBonusExported
+            foreach (var effect in bonus.Effects)
+                if (From(action, craftCause, effect) is { } exported) yield return exported;
+        }
+    }
+
+    static BonusExported? From(BonusAction action, CraftBonusCause? cause, BonusEffect effect)
+    {
+        var data = effect switch
         {
-            Action     = cause.Action.ToString(),
-            EffectType = effectType,
-            Value      = value,
-            Cap        = cap,
-            ItemTags   = cause.ItemTags.Count > 0 ? cause.ItemTags.ToArray() : null,
+            BonusEffectCappedMultiplicative capped => ("CappedMultiplicative", capped.Value,    (float?)capped.Cap, (float?)null, (float[]?)null),
+            BonusEffectMultiplicative mult         => ("Multiplicative",       mult.Value,      (float?)null,       (float?)null, (float[]?)null),
+            BonusEffectAdditive additive           => ("Additive",             additive.Value,  (float?)null,       (float?)null, (float[]?)null),
+            BonusEffectAdditivePercent percent     => ("AdditivePercent",      percent.Percent, (float?)null,       (float?)null, (float[]?)null),
+            BonusEffectOverride ovr                => ("Override",             ovr.Value,       (float?)null,       (float?)null, (float[]?)null),
+            BonusEffectChance chanceEffect         => ("Chance",               chanceEffect.SuccessValue, (float?)null, (float?)chanceEffect.Chance, (float[]?)null),
+            _                                      => SampleUnknownEffect(action, effect),
+        };
+        if (data.Item1 == null) return null;
+
+        return new BonusExported
+        {
+            Action             = action.ToString(),
+            EffectType         = data.Item1,
+            Value              = data.Item2,
+            Cap                = data.Item3,
+            Chance             = data.Item4,
+            Levels             = data.Item5,
+            SkillTypes         = ToSkillNames(cause?.SkillTypes),
+            ExcludedSkillTypes = ToSkillNames(cause?.ExcludedSkillTypes),
+            ItemTags           = cause?.ItemTags.Count > 0 ? cause.ItemTags.ToArray() : null,
         };
     }
+
+    const int MaxSampledLevels = 10;
+
+    //Effect classes added by other mods (e.g. BeEco's BonusEffectTieredMultiplicative) can't be referenced at compile time.
+    //Sample TransformValue on synthetic contexts to recover their math; only deterministic, purely multiplicative effects
+    //are exportable this way — anything else (chance-based, additive-pooling, context-dependent) is skipped as before.
+    static (string?, float, float?, float?, float[]?) SampleUnknownEffect(BonusAction action, BonusEffect effect)
+    {
+        var none = ((string?)null, 0f, (float?)null, (float?)null, (float[]?)null);
+        try
+        {
+            var levels = new List<float>();
+            for (var level = 1; level <= MaxSampledLevels; level++)
+            {
+                float atOne, atTwo, repeat;
+                try
+                {
+                    atOne  = Sample(action, effect, level, 1f);
+                    atTwo  = Sample(action, effect, level, 2f);
+                    repeat = Sample(action, effect, level, 1f);
+                }
+                catch when (levels.Count > 0) { break; } //Tiered tables may not define this many levels; keep what we have.
+                if (atOne != repeat) return none;                                                //Nondeterministic (chance-based).
+                if (Math.Abs(atTwo - (2f * atOne)) > 0.0001f * Math.Max(1f, Math.Abs(atTwo))) return none; //Not purely multiplicative.
+                levels.Add(atOne);
+            }
+
+            if (levels.All(l => l == 1f)) return none; //No-op at every level: nothing to export (e.g. pooling effects that only mutate context).
+            while (levels.Count > 1 && levels[^1] == levels[^2]) levels.RemoveAt(levels.Count - 1); //Trim the clamped tail; consumers reuse the last entry.
+
+            return levels.Count == 1
+                ? ("Multiplicative",       levels[0], (float?)null, (float?)null, (float[]?)null)
+                : ("TieredMultiplicative", levels[0], (float?)null, (float?)null, levels.ToArray());
+        }
+        catch { return none; }
+    }
+
+    static float Sample(BonusAction action, BonusEffect effect, int level, float baseValue)
+        => effect.TransformValue(new BonusContext { Action = action, SourceLevel = level }, baseValue);
+
+    static string[]? ToSkillNames(HashSet<Type>? skillTypes) => skillTypes?.Count > 0 ? skillTypes.Select(t => Item.Get(t)?.Name ?? t.Name).ToArray() : null;
 }
 
 public class DynamicTypeWriteOnlyConverter : JsonConverter
