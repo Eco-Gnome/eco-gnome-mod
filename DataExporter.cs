@@ -29,6 +29,8 @@ public static class DataExporter
             var craftingTables = RecipeManager.AllRecipes.Where(r => r.Family?.CraftingTable is not null).Select(r => r.Family.CraftingTable).Distinct()
                 .ToList();
 
+            BuildingExporter.EnsureOccupancyInitialized(Item.AllItemsExceptHidden.OfType<WorldObjectItem>());
+
             var options = new JsonSerializerSettings
             {
                 NullValueHandling = NullValueHandling.Ignore,
@@ -44,7 +46,9 @@ public static class DataExporter
                     select new TagExported(tag)
                 ).ToList(),
                 RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe, TalentManager.AllTalents))).ToList(),
-                ModuleSlotRegistry.All.Select(slot => new ModuleSlotExported(slot)).ToList()
+                ModuleSlotRegistry.All.Select(slot => new ModuleSlotExported(slot)).ToList(),
+                BuildingExported.Capture(),
+                HousingConfigExported.Capture()
             );
 
             File.WriteAllText("eco_gnome_data.json", JsonConvert.SerializeObject(data, options));
@@ -127,15 +131,20 @@ public class ExportedData
     [JsonProperty] public List<TagExported> Tags { get; set; }
     [JsonProperty] public List<RecipeExported> Recipes { get; set; }
     [JsonProperty] public List<ModuleSlotExported> ModuleSlots { get; set; }
+    [JsonProperty] public BuildingExported? Building { get; set; }           //Room rules and RoomConfig of this server (building planner). Null if capture failed.
+    [JsonProperty] public HousingConfigExported? HousingConfig { get; set; } //Room categories, tier caps and occupancy multipliers (building planner). Null if capture failed.
 
-    public ExportedData(List<SkillExported> skills, List<ItemExported> items, List<TagExported> tags, List<RecipeExported> recipes, List<ModuleSlotExported> moduleSlots)
+    public ExportedData(List<SkillExported> skills, List<ItemExported> items, List<TagExported> tags, List<RecipeExported> recipes, List<ModuleSlotExported> moduleSlots,
+        BuildingExported? building, HousingConfigExported? housingConfig)
     {
-        this.Version = 4; // version of the file, to be changed when a breaking change is done. Eco Gnome will refuse to import files with older version.
+        this.Version = 5; // version of the file, to be changed when a breaking change is done. Eco Gnome will refuse to import files with older version.
         this.Skills = skills;
         this.Items = items;
         this.Tags = tags;
         this.Recipes = recipes;
         this.ModuleSlots = moduleSlots;
+        this.Building = building;
+        this.HousingConfig = housingConfig;
     }
 }
 
@@ -260,6 +269,8 @@ public class ItemExported
     [JsonProperty] public float? FuelConsumptionPerSecond { get; set; } //Energy consumed per second by the WorldObject (same unit as FuelCalories). Field is named "JoulesPerSecond" in code but the unit matches FuelAttribute calories.
     [JsonProperty] public FoodExported? Food { get; set; }
     [JsonProperty] public HousingExported? Housing { get; set; }
+    [JsonProperty] public WorldObjectExported? WorldObject { get; set; }     //Occupancy footprint, tier and placement flags (WorldObjectItems only).
+    [JsonProperty] public BuildingBlockExported? BuildingBlock { get; set; } //Wall/tier flags of the block this item places (BlockItems only).
 
     public ItemExported(Item item, List<Item> craftingTables)
     {
@@ -280,7 +291,11 @@ public class ItemExported
             this.AcceptedFuelTags = ReadFuelTagListFromWorldObject(worldObjectItem.WorldObjectType);
             this.FuelConsumptionPerSecond = ReadFuelConsumptionRate(worldObjectItem.WorldObjectType);
             this.RoomRequirements = RoomRequirementsExported.From(worldObjectItem.WorldObjectType);
+            this.WorldObject = WorldObjectExported.From(worldObjectItem);
         }
+
+        if (item is BlockItem blockItem)
+            this.BuildingBlock = BuildingBlockExported.From(blockItem);
 
         if (item is PluginModule pluginModule)
         {
