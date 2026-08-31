@@ -55,29 +55,18 @@ The plugin creates a config file `Configs/EcoGnome.eco` with:
 
 Download the latest `EcoGnomeMod.dll` and `StoreObject.cs` from the [Releases page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) and drop them in `Mods/UserCode` in your server.
 
-## Exported data (`eco_gnome_data.json`, version 5)
-
-Version 5 is additive over version 4. New content used by the Eco Gnome building planner:
-
-- `Building` — room rules of the server: `MaxRoomDistance`, `MinRoomVolume`, `MaxBlockTier` and the `RoomConfig` block (`EmptyBlocksCountAsWindows`, `WallBlocksPerWindow`, painted-block bonuses, `RoomCategoryDiminishingReturnRate`, `HousePointsMultiplierPerResidentsCount`, `PollutionPenaltyEnabled`).
-- `HousingConfig` — room `Categories` (support rules, caps, flags), `RoomTiers` (soft/hard caps per material tier) and `OccupancyMultipliers` (index = residents).
-- `Items[].WorldObject` — for every placeable object: `Occupancy` cells (Eco axes, `Y` vertical; `BlockType` = `Occupied` | `Wall` | `Solid` | `Water` | `None`), `OccupancyIsDefault`, `Dimensions`, `Tier` (doors, windows…), `HasTableSurface` / `CanBeOnSurface` (stacking), `RequiredAttachedSide`, `MustBeGridAligned`, `WallMounted`, `IsCustomAttachmentLogic`.
-- `Items[].BuildingBlock` — for every block item: `Tier`, `HasTier`, `IsWall`, `IsSolid`, `IgnoreRooms`, `HasForms`, `IsRoomMaterialOption`.
-
-Nothing is instantiated to gather this data; a failure in any of these sections is logged and leaves the field `null` so the rest of the export is never lost.
-
 ## Development build
 
 The project references the Eco server sources (`..\..\Eco.Core`, `..\..\Eco.Gameplay`, …), so the clone has to sit two levels below `Eco\Server`. With the Eco source tree at `Eco\` and this repository cloned elsewhere, on Windows:
 
 ```powershell
-New-Item -ItemType Directory Eco\Server\ThirdParty
-New-Item -ItemType Junction -Path Eco\Server\ThirdParty\eco-gnome-mod -Target <path-to-this-clone>
+New-Item -ItemType Directory Eco\Server\ServerMods
+New-Item -ItemType Junction -Path Eco\Server\ServerMods\eco-gnome-mod -Target <path-to-this-clone>
 # StoreObject.cs is compiled by the server together with the other mods (Eco.Mods), so make it visible to the Eco.Mods dev build too:
 New-Item -ItemType Directory Eco\Server\Mods\__core__\EcoGnomeDev
 New-Item -ItemType HardLink -Path Eco\Server\Mods\__core__\EcoGnomeDev\StoreObject.cs -Target <path-to-this-clone>\StoreObject.cs
 
-dotnet build Eco\Server\ThirdParty\eco-gnome-mod\EcoGnomeMod.csproj -c Debug "-p:SolutionDir=<absolute-path-to>\Eco\Server\"
+dotnet build Eco\Server\ServerMods\eco-gnome-mod\EcoGnomeMod.csproj -c Debug "-p:SolutionDir=<absolute-path-to>\Eco\Server\"
 ```
 
 Notes:
