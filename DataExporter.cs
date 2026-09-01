@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Reflection.Emit;
 using Eco.Core.Items;
 using Eco.Core.Utils;
@@ -205,9 +205,10 @@ public class RecipeExported
 
         // Inject synthetic talent modifiers from the v13 Bonus system.
         // Routing is per-action (the runtime filter on ItemTags applies at recipe scope, see CraftBonusCause.IsTriggered):
-        //   ResourceCost → all ingredients, Yield → all products, LaborCost → labor, CraftTime → craft minutes.
+        //   ResourceCost → non-static ingredients, Yield → all products, LaborCost → labor, CraftTime → craft minutes.
+        // Static (ConstantValue) ingredients skip ResourceCost like WorkOrder.CurrentNeededTags does; products/labor/time are not gated in-game.
         var matchingTalents = DataExporter.FindMatchingCraftTalents(recipeFamily, recipe, allTalents);
-        foreach (var ing in this.Ingredients)
+        foreach (var ing in this.Ingredients.Where(i => !i.Quantity.IsConstant))
             ing.Quantity.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.ResourceCost).Select(m => m.TalentName));
         this.Labor.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.LaborCost).Select(m => m.TalentName));
         this.CraftMinutes.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.CraftTime).Select(m => m.TalentName));
@@ -707,10 +708,12 @@ public class DynamicValueExported
 {
     [JsonProperty] public float BaseValue { get; set; }
     [JsonProperty] public List<ModifierExported> Modifiers { get; set; }
+    public bool IsConstant { get; } //Static (yellow-bordered) value; not serialized.
 
     public DynamicValueExported(IDynamicValue dynamicValue)
     {
         this.BaseValue = dynamicValue.GetBaseValue;
+        this.IsConstant = dynamicValue is ConstantValue;
         this.Modifiers = new List<ModifierExported>();
 
         List<IDynamicValue> dynamicValues = dynamicValue is MultiDynamicValue multiDynamicValue ? multiDynamicValue.Values.ToList() : [dynamicValue];
