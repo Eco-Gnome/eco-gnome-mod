@@ -179,9 +179,12 @@ public class RecipeExported
     [JsonProperty] public List<IngredientExported> Ingredients { get; set; }
     [JsonProperty] public List<ProductExported> Products { get; set; }
 
+    //A subclassed Recipe is a variant of its family and exports under its own name; a plain Recipe exports under the family name.
+    public static string NameOf(RecipeFamily recipeFamily, Recipe recipe) => recipe.GetType() != typeof(Recipe) ? recipe.GetType().Name : recipeFamily.GetType().Name;
+
     public RecipeExported(RecipeFamily recipeFamily, Recipe recipe, Talent[] allTalents)
     {
-        this.Name = recipe.GetType() != typeof(Recipe) ? recipe.GetType().Name : recipeFamily.GetType().Name;
+        this.Name = NameOf(recipeFamily, recipe);
         this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName.NotTranslated);
         this.FamilyName = recipeFamily.RecipeName;
         this.CraftMinutes = new DynamicValueExported(recipeFamily.CraftMinutes);
@@ -596,6 +599,7 @@ public class BonusExported
     [JsonProperty] public string[]? SkillTypes { get; set; }         //Filter: recipe's required skill must be one of these. Null = no filter.
     [JsonProperty] public string[]? ExcludedSkillTypes { get; set; } //Filter: recipes requiring one of these skills are excluded. Null = no exclusion.
     [JsonProperty] public string[]? ItemTags { get; set; }           //Recipe-scope filter: any product carrying one of these tags triggers the bonus. Null = no tag filter.
+    [JsonProperty] public string[]? Recipes { get; set; }            //Filter: only these recipes trigger the bonus, named as in Recipes[].Name. Null = no recipe filter.
 
     /// <summary>Flattens a Bonus into one entry per (craft cause, effect) pair. Non-craft causes and effects that can't map to a flat price formula are skipped.</summary>
     public static IEnumerable<BonusExported> FromBonus(Bonus bonus)
@@ -640,8 +644,18 @@ public class BonusExported
             SkillTypes         = ToSkillNames(cause?.SkillTypes),
             ExcludedSkillTypes = ToSkillNames(cause?.ExcludedSkillTypes),
             ItemTags           = cause?.ItemTags.Count > 0 ? cause.ItemTags.ToArray() : null,
+            Recipes            = ToRecipeNames(cause?.Recipes),
         };
     }
+
+    //CraftBonusCause.Recipes holds RecipeFamily types; resolve them to the names used by RecipeExported so a consumer can match a recipe directly.
+    //A family that isn't registered (mod not loaded) keeps its type name: no exported recipe carries it, so the bonus applies to nothing, which is correct.
+    static string[]? ToRecipeNames(HashSet<Type>? types) => types is { Count: > 0 }
+        ? types.SelectMany(type => RecipeManager.ContainsRecipeFamily(type)
+                ? RecipeManager.GetRecipeFamily(type).Recipes.Select(recipe => RecipeExported.NameOf(RecipeManager.GetRecipeFamily(type), recipe))
+                : [type.Name])
+            .Distinct().ToArray()
+        : null;
 
     const int MaxSampledLevels = 10;
 
