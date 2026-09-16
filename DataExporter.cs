@@ -37,15 +37,17 @@ public static class DataExporter
                 Formatting = Formatting.Indented,
             };
 
+            var talentVariants = TalentVariant.BuildAll(TalentManager.AllTalents);
+
             var data = new ExportedData(
-                Skill.AllSkills.Select(skill => new SkillExported(skill, allTalentGroups)).ToList(),
+                Skill.AllSkills.Select(skill => new SkillExported(skill, allTalentGroups, talentVariants)).ToList(),
                 Item.AllItemsExceptHidden.Select(item => new ItemExported(item, craftingTables)).ToList(),
                 (
                     from tag in TagManager.AllTags
                     where Item.AllItemsExceptHidden.Where(x => x.Tags().Contains(tag)).Select(x => x.Name).Any()
                     select new TagExported(tag)
                 ).ToList(),
-                RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe, TalentManager.AllTalents))).ToList(),
+                RecipeManager.AllRecipeFamilies.SelectMany(recipeFamily => recipeFamily.Recipes.Select(recipe => new RecipeExported(recipeFamily, recipe, talentVariants))).ToList(),
                 ModuleSlotRegistry.All.Select(slot => new ModuleSlotExported(slot)).ToList(),
                 BuildingExported.Capture(),
                 HousingConfigExported.Capture()
@@ -63,7 +65,7 @@ public static class DataExporter
 
     public static readonly HashSet<BonusAction> RelevantActions = [BonusAction.ResourceCost, BonusAction.LaborCost, BonusAction.CraftTime, BonusAction.Yield];
 
-    public static List<(string TalentName, BonusAction Action)> FindMatchingCraftTalents(RecipeFamily recipeFamily, Recipe recipe, Talent[] allTalents)
+    public static List<(string TalentName, BonusAction Action)> FindMatchingCraftTalents(RecipeFamily recipeFamily, Recipe recipe, List<TalentVariant> talentVariants)
     {
         var results = new List<(string, BonusAction)>();
         var recipeSkillTypes = recipeFamily.RequiredSkills?.Select(s => s.SkillType).ToHashSet() ?? [];
@@ -75,13 +77,12 @@ public static class DataExporter
             .Select(t => t.Name)
             .ToHashSet();
 
-        foreach (var talent in allTalents)
+        foreach (var variant in talentVariants)
         {
-            if (talent.Base) continue;
-            foreach (var bonus in talent.Bonuses)
+            if (variant.Talent.Base) continue;
+            foreach (var (craftCause, _) in variant.Entries)
             {
-                var craftCause = bonus.Causes.OfType<CraftBonusCause>().FirstOrDefault();
-                if (craftCause == null || !RelevantActions.Contains(craftCause.Action)) continue;
+                if (craftCause == null) continue;
 
                 if (craftCause.SkillTypes.Count > 0 && !craftCause.SkillTypes.Any(st => recipeSkillTypes.Contains(st)))
                     continue;
@@ -94,7 +95,7 @@ public static class DataExporter
                 if (craftCause.ItemTags.Count > 0 && !craftCause.ItemTags.Any(it => productTags.Contains(it)))
                     continue;
 
-                results.Add((talent.GetType().Name, craftCause.Action));
+                results.Add((variant.Name, craftCause.Action));
             }
         }
         return results;
@@ -182,7 +183,7 @@ public class RecipeExported
     //A subclassed Recipe is a variant of its family and exports under its own name; a plain Recipe exports under the family name.
     public static string NameOf(RecipeFamily recipeFamily, Recipe recipe) => recipe.GetType() != typeof(Recipe) ? recipe.GetType().Name : recipeFamily.GetType().Name;
 
-    public RecipeExported(RecipeFamily recipeFamily, Recipe recipe, Talent[] allTalents)
+    public RecipeExported(RecipeFamily recipeFamily, Recipe recipe, List<TalentVariant> talentVariants)
     {
         this.Name = NameOf(recipeFamily, recipe);
         this.LocalizedName = DataExporter.GenerateLocalization(recipe.DisplayName.NotTranslated);
@@ -219,7 +220,7 @@ public class RecipeExported
         // Routing is per-action (the runtime filter on ItemTags applies at recipe scope, see CraftBonusCause.IsTriggered):
         //   ResourceCost → non-static ingredients, Yield → all products, LaborCost → labor, CraftTime → craft minutes.
         // Static (ConstantValue) ingredients skip ResourceCost like WorkOrder.CurrentNeededTags does; products/labor/time are not gated in-game.
-        var matchingTalents = DataExporter.FindMatchingCraftTalents(recipeFamily, recipe, allTalents);
+        var matchingTalents = DataExporter.FindMatchingCraftTalents(recipeFamily, recipe, talentVariants);
         foreach (var ing in this.Ingredients.Where(i => !i.Quantity.IsConstant))
             ing.Quantity.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.ResourceCost).Select(m => m.TalentName));
         this.Labor.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.LaborCost).Select(m => m.TalentName));
@@ -534,7 +535,7 @@ public class SkillExported
     [JsonProperty] public float[] LaborReducePercent { get; set; }
     [JsonProperty] public List<TalentExported> Talents { get; set; }
 
-    public SkillExported(Skill skill, TalentGroup[] allTalentGroups)
+    public SkillExported(Skill skill, TalentGroup[] allTalentGroups, List<TalentVariant> talentVariants)
     {
         this.Name = skill.Name;
         this.LocalizedName = DataExporter.GenerateLocalization(skill.DisplayName.NotTranslated);
@@ -544,9 +545,9 @@ public class SkillExported
 
         this.Talents = allTalentGroups
             .Where(tg => tg.OwningSkill == skill.Type)
-            .SelectMany(tg => TalentManager.AllTalents
-                .Where(t => t.TalentGroupType == tg.Type)
-                .Select(t => new TalentExported(t, tg)))
+            .SelectMany(tg => talentVariants
+                .Where(variant => variant.Talent.TalentGroupType == tg.Type)
+                .Select(variant => new TalentExported(variant, tg)))
             .ToList();
     }
 }
@@ -562,9 +563,10 @@ public class TalentExported
     [JsonProperty] public Dictionary<string, string> LocalizedDescription { get; set; }
     [JsonProperty] public List<BonusExported> Bonuses { get; set; }
 
-    public TalentExported(Talent talent, TalentGroup talentGroup)
+    public TalentExported(TalentVariant variant, TalentGroup talentGroup)
     {
-        this.Name = talent.GetType().Name;
+        var talent = variant.Talent;
+        this.Name = variant.Name;
         this.TalentGroupName = talentGroup.GetType().Name;
         var groupType = talentGroup.GetType();
         if (groupType.GetCustomAttribute<LocDisplayNameAttribute>() is not null)
@@ -583,7 +585,7 @@ public class TalentExported
         this.Level = talentGroup.Level;
         this.MaxLevel = talentGroup.MaxTalentLevel;
 
-        this.Bonuses = talent.Bonuses.SelectMany(BonusExported.FromBonus).ToList();
+        this.Bonuses = variant.Entries.Select(entry => entry.Bonus).ToList();
     }
 }
 
@@ -601,8 +603,10 @@ public class BonusExported
     [JsonProperty] public string[]? ItemTags { get; set; }           //Recipe-scope filter: any product carrying one of these tags triggers the bonus. Null = no tag filter.
     [JsonProperty] public string[]? Recipes { get; set; }            //Filter: only these recipes trigger the bonus, named as in Recipes[].Name. Null = no recipe filter.
 
-    /// <summary>Flattens a Bonus into one entry per (craft cause, effect) pair. Non-craft causes and effects that can't map to a flat price formula are skipped.</summary>
-    public static IEnumerable<BonusExported> FromBonus(Bonus bonus)
+    public static IEnumerable<BonusExported> FromBonus(Bonus bonus) => FromBonusWithCause(bonus).Select(entry => entry.Bonus);
+
+    /// <summary>Flattens a Bonus into one entry per (craft cause, effect) pair, each with the cause it came from. Non-craft causes and effects that can't map to a flat price formula are skipped.</summary>
+    public static IEnumerable<(CraftBonusCause? Cause, BonusExported Bonus)> FromBonusWithCause(Bonus bonus)
     {
         foreach (var cause in bonus.Causes)
         {
@@ -615,7 +619,7 @@ public class BonusExported
             if (!DataExporter.RelevantActions.Contains(action)) continue;
 
             foreach (var effect in bonus.Effects)
-                if (From(action, craftCause, effect) is { } exported) yield return exported;
+                if (From(action, craftCause, effect) is { } exported) yield return (craftCause, exported);
         }
     }
 
