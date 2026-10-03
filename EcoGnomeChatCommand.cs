@@ -7,6 +7,7 @@ using Eco.Gameplay.Players;
 using Eco.Gameplay.Property;
 using Eco.Gameplay.Rooms;
 using Eco.Gameplay.Systems.Messaging.Chat.Commands;
+using Eco.Gameplay.UI;
 using Eco.Mods.TechTree;
 using Eco.Plugins.Networking;
 using Eco.Shared.IoC;
@@ -48,6 +49,56 @@ public static class EcoGnomeChatCommand
             await EcoGnomeApi.RegisterUserAsync(NetworkManager.ServerID.ToString(), userSecretId, user.Id.ToString(), user.Name);
             user.Player?.MsgLocStr("Success");
         }, user);
+    }
+
+    [ChatSubCommand("EcoGnome", "Get one of your Eco Gnome shopping lists as a paper in your inventory. Without a name, lists them.", "egliste", ChatAuthorizationLevel.User)]
+    public static async Task ShoppingList(User user, string name = "")
+    {
+        await CatchApiError(async () =>
+        {
+            var list = await EcoGnomeApi.GetShoppingListAsync(NetworkManager.ServerID.ToString(), user.Id.ToString(), name);
+            if (name == "")
+            {
+                user.Player?.Msg(ShoppingLists.Translated(list.Lists.Count == 0
+                    ? Localizer.DoStr("You have no shopping list on Eco Gnome.")
+                    : Localizer.Do($"Your shopping lists: {string.Join(", ", list.Lists)}")));
+                return;
+            }
+
+            GiveOrUpdate(user, list);
+        }, user);
+    }
+
+    /// <summary>Store tab button: lets the player pick one of their Eco Gnome shopping lists, then gives its paper.</summary>
+    public static async Task PickShoppingList(User user)
+    {
+        await CatchApiError(async () =>
+        {
+            var serverId = NetworkManager.ServerID.ToString();
+            var names = (await EcoGnomeApi.GetShoppingListAsync(serverId, user.Id.ToString(), "")).Lists;
+            if (names.Count == 0) { user.Player?.Msg(ShoppingLists.Translated(Localizer.DoStr("You have no shopping list on Eco Gnome."))); return; }
+
+            var index = await user.Player!.OptionBox(ShoppingLists.Translated(Localizer.DoStr("Choose a shopping list")), names);
+            if (index < 0 || index >= names.Count) return;
+
+            GiveOrUpdate(user, await EcoGnomeApi.GetShoppingListAsync(serverId, user.Id.ToString(), names[index]));
+        }, user);
+    }
+
+    private static void GiveOrUpdate(User user, EcoGnomeShoppingList list)
+    {
+        // Already carried: update that paper rather than giving a second one that would count the same purchases apart
+        if (ShoppingLists.Carried(user).FirstOrDefault(l => l.Name == list.Name) is { } carried)
+        {
+            carried.Update(list.Items);
+            ShoppingListDisplay.Refresh(user);
+            user.Player?.Msg(ShoppingLists.Translated(Localizer.Do($"Shopping list {list.Name} updated ({list.Items.Count} lines).")));
+            return;
+        }
+
+        var result = ShoppingLists.Give(user, list.Name, list.Items.Select(i => new ShoppingEntry { ItemName = i.Name, IsTag = i.IsTag, Target = i.Quantity }));
+        if (result.Success) user.Player?.Msg(ShoppingLists.Translated(Localizer.Do($"Shopping list {list.Name} added to your inventory ({list.Items.Count} lines).")));
+        else                user.Player?.Error(result.Message);
     }
 
     public static async Task SyncShop(User user, INetObject target, string dataContext, OfferType scope, bool syncTags)

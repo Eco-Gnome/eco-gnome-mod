@@ -2,6 +2,7 @@
 using Eco.Shared.Utils;
 using Eco.Core.Plugins.Interfaces;
 using Eco.Core.Utils;
+using Eco.Gameplay.GameActions;
 using Eco.Gameplay.Players;
 using Eco.Mods.TechTree;
 using Eco.Shared.Localization;
@@ -41,6 +42,16 @@ public class EcoGnomeChatCommandHandler: IEcoGnomeChatCommand
     {
         await EcoGnomeChatCommand.SyncArea(user, radius, dataContext);
     }
+
+    public async Task PickShoppingList(User user)
+    {
+        await EcoGnomeChatCommand.PickShoppingList(user);
+    }
+
+    public async Task BuyShoppingList(User user, INetObject store)
+    {
+        await ShoppingListPurchase.Buy(user, store);
+    }
 }
 
 public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitializablePlugin, IConfigurablePlugin
@@ -71,6 +82,8 @@ public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitiali
     public void Initialize(TimedTask timer)
     {
         DataExporter.ExportAll();
+        ActionUtil.AddListener(new ShoppingTracker());
+        ShoppingListDisplay.Start();
     }
 
     public object GetEditObject() => this.config.Config;

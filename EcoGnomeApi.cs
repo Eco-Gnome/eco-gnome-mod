@@ -89,6 +89,26 @@ public static class EcoGnomeApi
                 throw new Exception(await response.Content.ReadAsStringAsync());
         }
     }
+    public static async Task<EcoGnomeShoppingList> GetShoppingListAsync(string ecoServerId, string ecoUserId, string name)
+    {
+        using var httpClient = new HttpClient();
+        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/shopping-list" +
+                         $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
+                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
+                         $"&name={Uri.EscapeDataString(name)}";
+        var response = await httpClient.GetAsync(requestUrl);
+
+        switch (response.StatusCode)
+        {
+            case System.Net.HttpStatusCode.BadRequest:
+                throw new EcoApiException(await response.Content.ReadAsStringAsync());
+            case System.Net.HttpStatusCode.OK:
+                var jsonResponse = await response.Content.ReadAsStringAsync();
+                return JsonConvert.DeserializeObject<EcoGnomeShoppingList>(jsonResponse) ?? new EcoGnomeShoppingList("", [], []);
+            default:
+                throw new Exception(await response.Content.ReadAsStringAsync());
+        }
+    }
 }
 
 public class EcoGnomeCategory(string name, OfferType offerType, List<EcoGnomeItem> items)
@@ -124,6 +144,30 @@ public class EcoGnomeItem(string name, decimal price, int minDurability = -1, in
     public int MaxIntegrity { get; set; } = maxIntegrity;
 
     [JsonIgnore] public bool IsTag => Item.GetType(this.Name) is null && TagManager.Tag(this.Name) is not null;
+}
+
+public class EcoGnomeShoppingList(string name, List<string> lists, List<EcoGnomeShoppingItem> items)
+{
+    [JsonProperty(nameof(Name))]
+    public string Name { get; set; } = name;
+
+    [JsonProperty(nameof(Lists))]
+    public List<string> Lists { get; set; } = lists;
+
+    [JsonProperty(nameof(Items))]
+    public List<EcoGnomeShoppingItem> Items { get; set; } = items;
+}
+
+public class EcoGnomeShoppingItem(string name, bool isTag, int quantity)
+{
+    [JsonProperty(nameof(Name))]
+    public string Name { get; set; } = name;
+
+    [JsonProperty(nameof(IsTag))]
+    public bool IsTag { get; set; } = isTag;
+
+    [JsonProperty(nameof(Quantity))]
+    public int Quantity { get; set; } = quantity;
 }
 
 public class EcoApiException(string message) : Exception(message);

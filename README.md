@@ -6,7 +6,7 @@ This repository contains the Data Extractor part of [Eco Gnome](https://eco-gnom
 It allows to extract your specific server configuration (skills, recipes, items, ...) to visualize and calculate their prices on the [Eco Gnome](https://eco-gnome.com) website.
 The extracted file is created in your server root folder: `eco_gnome_data.json`.
 
-It also lets users synchronize prices between their Eco shops and Eco Gnome, either through chat commands or directly from the in-game Store UI.
+It also lets users synchronize prices between their Eco shops and Eco Gnome, either through chat commands or directly from the in-game Store UI, and carry their Eco Gnome shopping lists in game.
 
 ## Chat commands
 
@@ -26,6 +26,10 @@ It also lets users synchronize prices between their Eco shops and Eco Gnome, eit
 - `/EcoGnome syncroom {ContextName}` _(alias `egsyncroom`)_ — Update the price of every authorized for-sale world object in the room you are standing in, using your Eco Gnome prices. `ContextName` is optional; leave it blank to use the default context.
 - `/EcoGnome syncdeed {ContextName}` _(alias `egsyncdeed`)_ — Same as `syncroom`, but applied to every authorized for-sale object on the deed you are standing on.
 
+### Shopping lists
+
+- `/EcoGnome shoppinglist {Name}` _(alias `egliste`)_ — Get one of your Eco Gnome shopping lists as a paper in your inventory. Without a name, lists your shopping lists. If you already carry that list, it is updated instead. See [Shopping lists](#shopping-lists).
+
 > Shop sync commands (`syncshop`, `createshop`, ...) have been replaced by the in-game **Eco Gnome** component on stores — see below.
 
 ## In-game Eco Gnome component
@@ -41,8 +45,24 @@ Stores (`StoreObject`, `WoodShopCartObject`) now expose an **Eco Gnome** tab wit
 - **Sync Offers** _(button)_ — Full sync: adds missing items/tags, updates prices of existing ones, and removes offers no longer tracked in Eco Gnome. Honors **Scope** and **Sync Tags**.
 - **For Sale Sync Radius** — Radius (in blocks) used by the **Sync For Sale Area** button to find for-sale objects around the store.
 - **Sync For Sale Area** _(button)_ — Update the prices of every for-sale world object around this store (within the configured radius) from your Eco Gnome prices.
+- **Get a shopping list** _(button)_ — Pick one of your Eco Gnome shopping lists and get its paper in your inventory (same as `/egliste`).
+- **Buy my shopping list** _(button)_ — Buy in one go what this store sells of a shopping list you carry: pick the list and the bank account (when there are several), check the recap, confirm. See [Shopping lists](#shopping-lists).
 
 A shortcut interaction is also available: **Shift + Right-click** on a store triggers **Sync Prices with Eco Gnome** using the component's current settings.
+
+## Shopping lists
+
+A shopping list from Eco Gnome becomes a **Shopping List** paper in your inventory, one paper per list. It holds the "Items to buy" of the list, with a progress per line (`250 / 500`).
+
+- **Right-click** the paper in your inventory to open it: progress per line, the items a tag line accepts, a **Done** checkbox per line, **Reset purchases** (to buy the same list again, e.g. every day) and **Reload from Eco Gnome** (fetches the list again and keeps what was already bought).
+- **Store purchases are counted** for whoever carries the paper. A line is ticked automatically once its quantity is reached. When an item is on several carried lists, the oldest list is filled first.
+- **Selected in the toolbar**, the paper shows its lines in the bottom-right corner. Hovering an item (in a store too) shows how many each carried list still needs.
+- **Buy my shopping list** buys from the cheapest offers first, never more than what is left on a line or on the shelf. A store offer by tag is only used when every item it may deliver counts for the line, since the store picks which item is delivered; other lines sold only by tag are listed in the recap as "buy these yourself".
+
+Known limits:
+- Purchases from for-sale objects (signs) are not counted: tick the line by hand.
+- The paper is a copy: when the list changes on Eco Gnome, use **Reload from Eco Gnome**.
+- Remove every paper before removing the mod, or the save may fail to load.
 
 ## Configuration
 
@@ -54,6 +74,8 @@ The plugin creates a config file `Configs/EcoGnome.eco` with:
 ## Installation
 
 Download the latest `EcoGnomeMod.dll` and `StoreObject.cs` from the [Releases page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) and drop them in `Mods/UserCode` in your server.
+
+For the French texts, also copy `Translations/EcoGnome.csv` to `Mods/Translations` in your server.
 
 ## Development build
 

@@ -49,6 +49,8 @@ namespace Eco.Mods.TechTree
         Task SyncShop(User user, INetObject target, string dataContext, OfferType scope, bool syncTags);
         Task CreateShop(User user, INetObject target, string filterSkill, GroupBy groupBy, string dataContext, OfferType scope, bool syncTags);
         Task SyncArea(User user, int radius, string dataContext);
+        Task PickShoppingList(User user);
+        Task BuyShoppingList(User user, INetObject store);
     }
 
     public static class EcoGnomeChatCommandRegistry
@@ -91,6 +93,20 @@ namespace Eco.Mods.TechTree
 
         [Autogen, RPC, Sort(9), UITypeName("BigButton"), Description("Update prices of all for-sale world objects around this store (within the configured radius) from your Eco Gnome prices.")]
         public void SyncForSaleArea(Player player) => EcoGnomeChatCommandRegistry.Obj!.SyncArea(player.User, this.ForSaleSyncRadius, this.ContextName);
+
+        // Titles translated here: the client doesn't know the mod's texts.
+        [SyncToView, Autogen, Sort(10), UITypeName("GeneralHeader")]
+        public string ShoppingListTitle => Localizer.DoStr("Shopping list");
+
+        [SyncToView] public string GetShoppingListTitle => Localizer.DoStr("Get a shopping list");
+
+        [Autogen, RPC, Sort(11), UITypeName("BigButton"), DynamicTitle(nameof(GetShoppingListTitle)), Description("Pick one of your Eco Gnome shopping lists and get it as a paper in your inventory.")]
+        public void GetShoppingList(Player player) => EcoGnomeChatCommandRegistry.Obj!.PickShoppingList(player.User);
+
+        [SyncToView] public string BuyShoppingListTitle => Localizer.DoStr("Buy my shopping list");
+
+        [Autogen, RPC, Sort(12), UITypeName("BigButton"), DynamicTitle(nameof(BuyShoppingListTitle)), Description("Buy in one go what this store sells of a shopping list you carry, after a summary to confirm.")]
+        public void BuyShoppingList(Player player) => EcoGnomeChatCommandRegistry.Obj!.BuyShoppingList(player.User, this.Parent);
 
         [Interaction(InteractionTrigger.RightClick, "Sync Prices with Eco Gnome", InteractionModifier.Shift, authRequired: AccessType.FullAccess)]
         public void SyncShop(Player player, InteractionTriggerInfo triggerInfo, InteractionTarget target)
