@@ -54,21 +54,24 @@ public static class ShoppingListPurchase
         var account = accounts.Count == 1 ? accounts[0] : await Pick(player, Localizer.DoStr("Pay with which bank account?"), accounts.Select(a => a.Name).ToList()) is { } j ? accounts[j] : null;
         if (account is null) return;
 
-        var tradeData = TradeData(plan);
-        var check = store.DoPerformTrade(user, tradeData, account, dryRun: true);
-        if (!check.Success) { player.Msg(check.Message); return; }
+        // The store may hold less than its offers show (offers sharing the same stock, storage rules): buy what goes through.
+        var check = store.DoPerformTrade(user, TradeData(plan), account, dryRun: true);
+        if (!check.Success) plan = Shrink(store, user, account, plan);
+        if (plan.Count == 0) { player.Msg(ShoppingLists.Translated(Localizer.Do($"{list.Name}: {check.Message}"))); return; }
+        missing = list.Entries.Where(e => !e.IsComplete && plan.Where(p => p.Entry == e).Sum(p => p.Amount) < e.Target - e.Bought).Except(manual.Select(m => m.Entry)).ToList();
 
-        var confirm = await player.OptionBox(ShoppingLists.Translated(Recap(list, plan, missing, manual, currency, account)), [Localizer.DoStr("Buy"), Localizer.DoStr("Cancel")]);
+        var partial = check.Success ? LocString.Empty : check.Message;
+        var confirm = await player.OptionBox(ShoppingLists.Translated(Recap(list, plan, missing, manual, partial, currency, account)), [Localizer.DoStr("Buy"), Localizer.DoStr("Cancel")]);
         if (confirm != 0) return;
 
-        var result = store.DoPerformTrade(user, tradeData, account);
-        if (!result.Success) player.Msg(result.Message);
+        var result = store.DoPerformTrade(user, TradeData(plan), account);
+        if (!result.Success) player.Msg(ShoppingLists.Translated(Localizer.Do($"{list.Name}: {result.Message}")));
     }
 
     // What to buy from which offer: the cheapest offers first, never more than what's left to buy or what's on the shelf.
-    static (List<(TradeOffer Offer, int Amount)> Plan, List<ShoppingEntry> Missing) Plan(ShoppingListData list, StoreComponent store)
+    static (List<(ShoppingEntry Entry, TradeOffer Offer, int Amount)> Plan, List<ShoppingEntry> Missing) Plan(ShoppingListData list, StoreComponent store)
     {
-        var plan = new List<(TradeOffer, int)>();
+        var plan = new List<(ShoppingEntry, TradeOffer, int)>();
         var missing = new List<ShoppingEntry>();
         var planned = new Dictionary<TradeOffer, int>();
         foreach (var entry in list.Entries.Where(e => !e.IsComplete))
@@ -80,7 +83,7 @@ public static class ShoppingListPurchase
                 var amount = Math.Min(left, offer.Stack.Quantity - planned.GetValueOrDefault(offer));
                 if (amount <= 0) continue;
                 planned[offer] = planned.GetValueOrDefault(offer) + amount;
-                plan.Add((offer, amount));
+                plan.Add((entry, offer, amount));
                 left -= amount;
                 if (left == 0) break;
             }
@@ -89,12 +92,30 @@ public static class ShoppingListPurchase
         return (plan, missing);
     }
 
+    // Line by line, keeps the most the store accepts on top of the lines already kept (dry runs).
+    static List<(ShoppingEntry Entry, TradeOffer Offer, int Amount)> Shrink(StoreComponent store, User user, BankAccount account, List<(ShoppingEntry Entry, TradeOffer Offer, int Amount)> plan)
+    {
+        var kept = new List<(ShoppingEntry Entry, TradeOffer Offer, int Amount)>();
+        foreach (var line in plan)
+        {
+            var (low, high) = (0, line.Amount);
+            while (low < high)
+            {
+                var mid = (low + high + 1) / 2;
+                if (store.DoPerformTrade(user, TradeData([.. kept, (line.Entry, line.Offer, mid)]), account, dryRun: true).Success) low = mid;
+                else                                                                                                             high = mid - 1;
+            }
+            if (low > 0) kept.Add((line.Entry, line.Offer, low));
+        }
+        return kept;
+    }
+
     // The store picks which items a tag offer delivers, so it only fits when every item it may deliver counts on the line.
     static bool Fits(TradeOffer offer, ShoppingEntry entry) => offer.IsTagOffer
         ? offer.MatchingTypes.Where(t => !t.IsAbstract).ToList() is { Count: > 0 } types && types.All(entry.Matches)
         : offer.Stack.Item is { } item && entry.Matches(item.Type);
 
-    static BSONObject TradeData(List<(TradeOffer Offer, int Amount)> plan)
+    static BSONObject TradeData(List<(ShoppingEntry Entry, TradeOffer Offer, int Amount)> plan)
     {
         var toBuy = BSONArray.New;
         foreach (var (offer, amount) in plan.GroupBy(p => p.Offer).Select(g => (g.Key, g.Sum(p => p.Amount))))
@@ -111,12 +132,13 @@ public static class ShoppingListPurchase
         return tradeData;
     }
 
-    static LocString Recap(ShoppingListData list, List<(TradeOffer Offer, int Amount)> plan, List<ShoppingEntry> missing, List<(ShoppingEntry Entry, TradeOffer Offer)> manual, Currency currency, BankAccount account)
+    static LocString Recap(ShoppingListData list, List<(ShoppingEntry Entry, TradeOffer Offer, int Amount)> plan, List<ShoppingEntry> missing, List<(ShoppingEntry Entry, TradeOffer Offer)> manual, LocString partial, Currency currency, BankAccount account)
     {
         var text = new StringBuilder();
         text.AppendLine(Localizer.Do($"Buy from {list.Name}:"));
-        foreach (var (offer, amount) in plan) text.AppendLine($"{amount} × {offer.DisplayLink()}  {currency.UILink(offer.Price * amount)}");
+        foreach (var (_, offer, amount) in plan) text.AppendLine($"{amount} × {offer.DisplayLink()}  {currency.UILink(offer.Price * amount)}");
         text.AppendLine(Localizer.Do($"Total: {currency.UILink(plan.Sum(p => p.Offer.Price * p.Amount))} (taxes not included), paid from {account.Name}."));
+        if (partial.IsSet())   text.AppendLine(Localizer.Do($"The whole list can't be bought here: {partial}"));
         if (missing.Count > 0) text.AppendLine(MissingLine(missing));
         if (manual.Count > 0) text.AppendLine(ManualLine(manual));
         return Localizer.NotLocalizedStr(text.ToString());
