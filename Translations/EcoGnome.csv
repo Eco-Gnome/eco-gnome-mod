@@ -26,3 +26,5 @@
 "","Sold here only by tag (the store picks the item), buy these yourself: {0}.","","Vendu ici seulement par tag (le magasin choisit l'objet), à acheter vous-même : {0}."
 "","{0}: {1}","","{0} : {1}"
 "","The whole list can't be bought here: {0}","","Toute la liste ne peut pas être achetée ici : {0}"
+"","Buy this shopping list","","Acheter cette liste de courses"
+"","{0}: nothing left to buy.","","{0} : plus rien à acheter."

@@ -1,4 +1,5 @@
 ﻿using Eco.Core.Controller;
+using Eco.Gameplay.Interactions.Interactors;
 using Eco.Gameplay.Items;
 using Eco.Gameplay.Players;
 using Eco.Gameplay.Systems;
@@ -7,6 +8,7 @@ using Eco.Shared.Items;
 using Eco.Shared.Localization;
 using Eco.Shared.Serialization;
 using Eco.Shared.Services;
+using Eco.Shared.SharedTypes;
 using Eco.Shared.Utils;
 
 namespace EcoGnomeMod;
@@ -16,7 +18,7 @@ namespace EcoGnomeMod;
 [Weight(10), HasIcon(Icon), Eco.Core.Items.Tag("NotInBrowser")]
 // Disposed of like the game's Paper: recycled into bio residue, or burnt.
 [SalvageCost(typeof(BioResidue), 0), Fuel(30), Eco.Core.Items.Tag("Fuel"), Eco.Core.Items.Tag("Burnable Fuel")]
-public class ShoppingListItem : Item, ICannotBeInStores
+public class ShoppingListItem : Item, ICannotBeInStores, IInteractor
 {
     // Must be a sprite of the client's baked atlases: "Clipboard" only exists in a source atlas.
     private const string Icon = "Contract";
@@ -40,6 +42,17 @@ public class ShoppingListItem : Item, ICannotBeInStores
         ViewEditor.Edit(player.User, this.Data, buttonText: Localizer.DoStr("Close"), overrideTitle: this.Data.Name, windowType: ViewEditor.WindowType.Simple);
         return string.Empty;
     }
+
+    /// <summary>Ctrl + right click on a store (tag set in StoreObject.cs) with the list in hand: same as the store's Buy my shopping list button, for this list.</summary>
+    [Interaction(InteractionTrigger.RightClick, modifier: InteractionModifier.Ctrl, authRequired: AccessType.None, tags: "EcoGnomeStore")]
+    public void BuyAtStore(Player player, InteractionTriggerInfo triggerInfo, InteractionTarget target)
+    {
+        // Called on the item type, not the held paper: the list comes from the toolbar.
+        if (player.User.ToolbarSelected?.Item is ShoppingListItem list && target.NetObj is { } store) _ = ShoppingListPurchase.Buy(player.User, store, list.Data);
+    }
+
+    // Interaction label: translated here, the client doesn't know the mod's texts.
+    public static LocString? GetOverrideInteractionName(string methodName) => ShoppingLists.Translated(Localizer.DoStr("Buy this shopping list"));
 
     public override void OnSelected(Player player)   { base.OnSelected(player);   ShoppingListDisplay.Refresh(player.User); }
     public override void OnDeselected(Player player) { base.OnDeselected(player); ShoppingListDisplay.Refresh(player.User); }

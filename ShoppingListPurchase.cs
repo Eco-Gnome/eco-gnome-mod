@@ -14,18 +14,25 @@ using Eco.Shared.Serialization;
 
 namespace EcoGnomeMod;
 
-/// <summary>Store tab button: buys in one go what this store sells of a carried shopping list. The store's cart is client-only, so the trade goes
+/// <summary>Store tab button, or Ctrl + right click on the store with a list in hand: buys in one go what this store sells of a carried shopping list. The store's cart is client-only, so the trade goes
 /// through the same server call as its "Confirm trade" button (laws, taxes, journal and list tracking apply).</summary>
 public static class ShoppingListPurchase
 {
-    public static async Task Buy(User user, INetObject target)
+    /// <param name="only">The list held in hand (Ctrl + right click on the store): bought without asking which list.</param>
+    public static async Task Buy(User user, INetObject target, ShoppingListData? only = null)
     {
         var player = user.Player!;
         var store = (target as WorldObject)?.GetComponent<StoreComponent>();
         if (store is null) return;
 
-        var lists = ShoppingLists.Carried(user).Where(l => l.Entries.Any(e => !e.IsComplete)).ToList();
-        if (lists.Count == 0) { player.Msg(ShoppingLists.Translated(Localizer.DoStr("Carry a shopping list with lines left to buy first (Get a shopping list button)."))); return; }
+        var lists = (only is null ? ShoppingLists.Carried(user) : [only]).Where(l => l.Entries.Any(e => !e.IsComplete)).ToList();
+        if (lists.Count == 0)
+        {
+            var reason = only is null ? Localizer.DoStr("Carry a shopping list with lines left to buy first (Get a shopping list button).")
+                                      : Localizer.Do($"{only.Name}: nothing left to buy.");
+            player.Msg(ShoppingLists.Translated(reason));
+            return;
+        }
 
         var list = lists.Count == 1 ? lists[0] : await Pick(player, Localizer.DoStr("Choose a shopping list"), lists.Select(l => l.Name).ToList()) is { } i ? lists[i] : null;
         if (list is null) return;
