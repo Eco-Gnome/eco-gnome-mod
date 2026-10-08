@@ -103,8 +103,14 @@ public class ShoppingListData : IController, INotifyPropertyChanged, IRPCAuthChe
 
     public ShoppingListData() { this.Entries = new ControllerList<ShoppingEntry>(this, nameof(this.Entries)); }
 
-    // The client shows an add button on every list and calls this when it's clicked (missing, the server throws); lines only come from Eco Gnome.
-    [RPC] public object? Add(Player player, string listName)
+    // The client shows add, delete and move buttons on every list despite PropReadOnly and calls these when they're clicked
+    // (missing, the server throws and the player is disconnected); lines only come from Eco Gnome.
+    [RPC] public object? Add(Player player, string listName) => LinesComeFromEcoGnome(player);
+    [RPC] public object? RemoveAt(Player player, string listName, int index) => LinesComeFromEcoGnome(player);
+    [RPC] public object? Remove(Player player, string listName, IController entry) => LinesComeFromEcoGnome(player);
+    [RPC] public object? Move(Player player, string listName, int index, int newIndex) => LinesComeFromEcoGnome(player);
+
+    private static object? LinesComeFromEcoGnome(Player player)
     {
         player.InfoBox(ShoppingLists.Translated(Localizer.DoStr("Lines come from Eco Gnome: change the list on the website, then click Reload from Eco Gnome.")));
         return null;
