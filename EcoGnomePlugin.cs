@@ -1,12 +1,11 @@
-﻿using Eco.Core.Plugins;
+using System.ComponentModel;
+using Eco.Core.Plugins;
 using Eco.Shared.Utils;
 using Eco.Core.Plugins.Interfaces;
 using Eco.Core.Utils;
 using Eco.Gameplay.GameActions;
-using Eco.Gameplay.Players;
 using Eco.Mods.TechTree;
 using Eco.Shared.Localization;
-using Eco.Shared.Networking;
 
 namespace EcoGnomeMod;
 
@@ -22,36 +21,26 @@ public class EcoGnomeMod: IModInit
 
 public class EcoGnomeConfig: Singleton<EcoGnomeConfig>
 {
+    [Description("URL used to talk to the Eco Gnome API.")]
     public string EcoGnomeUrl { get; set; } = "https://eco-gnome.com";
+
+    [Description("Optional. When set, used for the pages opened in the players' browser (when Eco Gnome is behind a reverse proxy).")]
     public string EcoGnomeUrlReverseProxy { get; set; } = "";
-}
 
-public class EcoGnomeChatCommandHandler: IEcoGnomeChatCommand
-{
-    public async Task CreateShop(User user, INetObject target, string filterSkill, GroupBy groupBy, string dataContext, OfferType scope, bool syncTags)
-    {
-        await EcoGnomeChatCommand.CreateShop(user, target, filterSkill, (int)groupBy, dataContext, scope, syncTags);
-    }
+    [Description("Once the server is registered on Eco Gnome, send its data (items, recipes, skills) at each start when it changed.")]
+    public bool AutoUploadData { get; set; } = true;
 
-    public async Task SyncShop(User user, INetObject target, string dataContext, OfferType scope, bool syncTags)
-    {
-        await EcoGnomeChatCommand.SyncShop(user, target, dataContext, scope, syncTags);
-    }
+    [Description("Let Eco Gnome read the average prices of this server's market (store offers and recent sales) from the server's web server, to suggest them to players. Requests are signed with a secret only this server and Eco Gnome know.")]
+    public bool ShareMarketPrices { get; set; } = true;
 
-    public async Task SyncArea(User user, int radius, string dataContext)
-    {
-        await EcoGnomeChatCommand.SyncArea(user, radius, dataContext);
-    }
+    [Description("Optional. Address Eco Gnome uses to reach this server's web server, e.g. https://eco.example.com. Empty: the network config's WebServerUrl, else this server's public IP and web server port.")]
+    public string MarketPublicUrl { get; set; } = "";
 
-    public async Task PickShoppingList(User user)
-    {
-        await EcoGnomeChatCommand.PickShoppingList(user);
-    }
+    [Description("Days of sales the traded average covers.")]
+    public int MarketWindowDays { get; set; } = 7;
 
-    public async Task BuyShoppingList(User user, INetObject store)
-    {
-        await ShoppingListPurchase.Buy(user, store);
-    }
+    [Description("Currency of the market prices. Leave empty to use the currency that moved the most money.")]
+    public string MarketCurrency { get; set; } = "";
 }
 
 public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitializablePlugin, IConfigurablePlugin
@@ -62,17 +51,17 @@ public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitiali
     public EcoGnomeConfig Config => this.config.Config;
     public ThreadSafeAction<object, string> ParamChanged { get; set; } = new();
 
+    /// <summary>Base URL of the pages opened in the players' browser.</summary>
+    public static string DisplayUrl => (Obj.Config.EcoGnomeUrlReverseProxy == "" ? Obj.Config.EcoGnomeUrl : Obj.Config.EcoGnomeUrlReverseProxy).TrimEnd('/');
+
     public EcoGnomePlugin()
     {
         this.config = new PluginConfig<EcoGnomeConfig>("EcoGnome");
-        EcoGnomeChatCommandRegistry.Obj = new EcoGnomeChatCommandHandler();
+        EcoGnomeServiceRegistry.Obj = new EcoGnomeService();
         this.SaveConfig();
     }
 
-    public string GetStatus()
-    {
-        return "OK";
-    }
+    public string GetStatus() => EcoGnomeTokens.IsServerLinked ? "Registered on Eco Gnome" : "Not registered on Eco Gnome (an admin registers it from the Eco Gnome tab of a store)";
 
     public string GetCategory()
     {
@@ -81,7 +70,7 @@ public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitiali
 
     public void Initialize(TimedTask timer)
     {
-        DataExporter.ExportAll();
+        EcoGnomeServerSync.Start(DataExporter.ExportAll());
         ActionUtil.AddListener(new ShoppingTracker());
         ShoppingListDisplay.Start();
     }
@@ -89,4 +78,3 @@ public class EcoGnomePlugin: Singleton<EcoGnomePlugin>, IModKitPlugin, IInitiali
     public object GetEditObject() => this.config.Config;
     public void OnEditObjectChanged(object o, string param) { this.SaveConfig(); }
 }
-

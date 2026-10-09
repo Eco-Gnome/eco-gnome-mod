@@ -1,147 +1,130 @@
-﻿using Newtonsoft.Json;
+using System.IO.Compression;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using Eco.Gameplay.Items;
 using Eco.Mods.TechTree;
+using Newtonsoft.Json;
 
 namespace EcoGnomeMod;
 
+//Client of the Eco Gnome v2 API. Every call but the link ones carries a bearer token obtained through the link flow.
 public static class EcoGnomeApi
 {
-    public static async Task RegisterServerAsync(string joinCode, string ecoServerId)
-    {
-        using var httpClient = new HttpClient();
-        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/register-server?joinCode={Uri.EscapeDataString(joinCode)}&ecoServerId={Uri.EscapeDataString(ecoServerId)}";
-        var response = await httpClient.GetAsync(requestUrl);
+    static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) }; //The data upload is imported synchronously on the site.
 
-        switch (response.StatusCode)
-        {
-            case System.Net.HttpStatusCode.BadRequest:
-                throw new EcoApiException(await response.Content.ReadAsStringAsync());
-            case System.Net.HttpStatusCode.OK:
-                return;
-            default:
-                throw new Exception(await response.Content.ReadAsStringAsync());
-        }
+    static string BaseUrl => EcoGnomePlugin.Obj.Config.EcoGnomeUrl.TrimEnd('/') + "/api/eco/v2";
+
+    // ---------- Link ----------
+
+    public static Task<LinkStart> StartLinkAsync(LinkKind kind, string ecoServerId, string ecoServerName, string? ecoUserId, string? ecoUserName, string? serverToken) =>
+        SendAsync<LinkStart>(HttpMethod.Post, "/link/start", serverToken, Json(new { Kind = kind, EcoServerId = ecoServerId, EcoServerName = ecoServerName, EcoUserId = ecoUserId, EcoUserName = ecoUserName }));
+
+    public static Task<LinkStatus> PollLinkAsync(string pollToken) =>
+        SendAsync<LinkStatus>(HttpMethod.Get, $"/link/status?pollToken={Uri.EscapeDataString(pollToken)}", null);
+
+    // ---------- Player ----------
+
+    public static Task<List<EcoGnomeItem>> GetPricesAsync(string userToken, string context) =>
+        SendAsync<List<EcoGnomeItem>>(HttpMethod.Get, $"/prices?context={Uri.EscapeDataString(context)}", userToken);
+
+    public static Task<List<EcoGnomeCategory>> GetCategoriesAsync(string userToken, string context, string filterSkill, GroupBy groupBy) =>
+        SendAsync<List<EcoGnomeCategory>>(HttpMethod.Get, $"/categories?context={Uri.EscapeDataString(context)}&filterSkill={Uri.EscapeDataString(filterSkill)}&groupBy={groupBy}", userToken);
+
+    public static Task<BuyPricesResult> PostBuyPricesAsync(string userToken, string context, List<EcoGnomeItem> prices) =>
+        SendAsync<BuyPricesResult>(HttpMethod.Post, $"/buy-prices?context={Uri.EscapeDataString(context)}", userToken, Json(prices.Select(p => new { p.Name, p.Price })));
+
+    /// <summary>The player's pseudo on Eco Gnome and their contexts, default first.</summary>
+    public static Task<EcoGnomeMe> GetMeAsync(string userToken) =>
+        SendAsync<EcoGnomeMe>(HttpMethod.Get, "/me", userToken);
+
+    /// <summary>One shopping list with its items, or only the names of the player's lists when <paramref name="name"/> is empty.</summary>
+    public static Task<EcoGnomeShoppingList> GetShoppingListAsync(string userToken, string name) =>
+        SendAsync<EcoGnomeShoppingList>(HttpMethod.Get, $"/shopping-list?name={Uri.EscapeDataString(name)}", userToken);
+
+    // ---------- Server ----------
+
+    public static Task<ServerStatus> GetServerStatusAsync(string serverToken) =>
+        SendAsync<ServerStatus>(HttpMethod.Get, "/server/status", serverToken);
+
+    public static Task<UploadResult> UploadDataAsync(string serverToken, string json)
+    {
+        //Compact JSON compresses about tenfold; the site decompresses it before hashing, so the hash is the one of the plain text.
+        var buffer = new MemoryStream();
+        using (var gzip = new GZipStream(buffer, CompressionLevel.Optimal, leaveOpen: true))
+            gzip.Write(Encoding.UTF8.GetBytes(json));
+
+        var content = new ByteArrayContent(buffer.ToArray());
+        content.Headers.ContentType     = new MediaTypeHeaderValue("application/json");
+        content.Headers.ContentEncoding.Add("gzip");
+        return SendAsync<UploadResult>(HttpMethod.Post, "/server/data", serverToken, content);
     }
 
-    public static async Task RegisterUserAsync(string ecoServerId, string userSecretId, string ecoUserId, string serverPseudo)
-    {
-        using var httpClient = new HttpClient();
-        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/register-user" +
-                         $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
-                         $"&userSecretId={Uri.EscapeDataString(userSecretId)}" +
-                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
-                         $"&serverPseudo={Uri.EscapeDataString(serverPseudo)}";
-        var response = await httpClient.GetAsync(requestUrl);
+    /// <summary>Tells Eco Gnome where to query this server's market prices and the secret to sign those requests with.</summary>
+    public static Task<ServerEndpointResult> PostServerEndpointAsync(string serverToken, string? webUrl, int webPort, string secret) =>
+        SendAsync<ServerEndpointResult>(HttpMethod.Post, "/server/endpoint", serverToken, Json(new { WebUrl = webUrl, WebPort = webPort, Secret = secret }));
 
-        switch (response.StatusCode)
-        {
-            case System.Net.HttpStatusCode.BadRequest:
-                throw new EcoApiException(await response.Content.ReadAsStringAsync());
-            case System.Net.HttpStatusCode.OK:
-                return;
-            default:
-                throw new Exception(await response.Content.ReadAsStringAsync());
-        }
+    // ---------- Plumbing ----------
+
+    static StringContent Json(object body) => new(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
+
+    static async Task<T> SendAsync<T>(HttpMethod method, string path, string? token, HttpContent? content = null)
+    {
+        using var request = new HttpRequestMessage(method, BaseUrl + path) { Content = content };
+        if (token is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await Http.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        //Player calls carry the current Eco Gnome account name: a rename on the website shows in the tab after the next button.
+        if (token is not null && response.Headers.TryGetValues("X-EcoGnome-Account", out var accounts) && EcoGnomeTokens.RefreshAccount(token, Uri.UnescapeDataString(accounts.First())))
+            EcoGnomeComponent.RefreshAll();
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized) throw new EcoGnomeNotLinkedException(ReadMessage(body) ?? "Eco Gnome refused the connection.");
+        if (response.StatusCode == HttpStatusCode.NotFound) throw new EcoApiException($"Eco Gnome at {EcoGnomePlugin.Obj.Config.EcoGnomeUrl} doesn't know this request: the website is older than this mod.");
+        if (!response.IsSuccessStatusCode) throw new EcoApiException(ReadMessage(body) ?? $"Eco Gnome answered {(int)response.StatusCode} {response.ReasonPhrase}.");
+
+        try { return JsonConvert.DeserializeObject<T>(body) ?? throw new EcoApiException("Empty answer from Eco Gnome."); }
+        catch (JsonException) { throw new EcoApiException($"Eco Gnome at {EcoGnomePlugin.Obj.Config.EcoGnomeUrl} sent an unexpected answer: check EcoGnomeUrl in Configs/EcoGnome.eco."); }
     }
 
-    public static async Task<List<EcoGnomeItem>> GetUserPricesAsync(string ecoServerId, string ecoUserId, string dataContext)
+    //Errors come as { "message": "..." }. Null when the body says nothing usable (empty, a proxy page...), so the caller reports the status instead.
+    static string? ReadMessage(string body)
     {
-        using var httpClient = new HttpClient();
-        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/user-prices" +
-                         $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
-                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
-                         $"&context={Uri.EscapeDataString(dataContext)}";
-        var response = await httpClient.GetAsync(requestUrl);
-
-        switch (response.StatusCode)
-        {
-            case System.Net.HttpStatusCode.BadRequest:
-                throw new EcoApiException(await response.Content.ReadAsStringAsync());
-            case System.Net.HttpStatusCode.OK:
-                var jsonResponse = await response.Content.ReadAsStringAsync();
-                var prices = JsonConvert.DeserializeObject<List<EcoGnomeItem>>(jsonResponse);
-                return prices ?? [];
-            default:
-                throw new Exception(await response.Content.ReadAsStringAsync());
-        }
-    }
-
-    public static async Task<List<EcoGnomeCategory>> GetItemsToBuyAndSellAsync(string ecoServerId, string ecoUserId, string filterSkill, GroupBy groupBy, string dataContext)
-    {
-        using var httpClient = new HttpClient();
-        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/categories-items-v2" +
-                         $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
-                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
-                         $"&filterSkill={Uri.EscapeDataString(filterSkill)}" +
-                         $"&groupBy={Uri.EscapeDataString(groupBy.ToString())}" +
-                         $"&context={Uri.EscapeDataString(dataContext)}";
-        var response = await httpClient.GetAsync(requestUrl);
-
-        switch (response.StatusCode)
-        {
-            case System.Net.HttpStatusCode.BadRequest:
-                throw new EcoApiException(await response.Content.ReadAsStringAsync());
-            case System.Net.HttpStatusCode.OK:
-                var jsonResponse = await response.Content.ReadAsStringAsync();
-                var prices = JsonConvert.DeserializeObject<List<EcoGnomeCategory>>(jsonResponse);
-                return prices ?? [];
-            default:
-                throw new Exception(await response.Content.ReadAsStringAsync());
-        }
-    }
-    public static async Task<EcoGnomeShoppingList> GetShoppingListAsync(string ecoServerId, string ecoUserId, string name)
-    {
-        using var httpClient = new HttpClient();
-        var requestUrl = $"{EcoGnomePlugin.Obj.Config.EcoGnomeUrl}/api/eco/shopping-list" +
-                         $"?ecoServerId={Uri.EscapeDataString(ecoServerId)}" +
-                         $"&ecoUserId={Uri.EscapeDataString(ecoUserId)}" +
-                         $"&name={Uri.EscapeDataString(name)}";
-        var response = await httpClient.GetAsync(requestUrl);
-
-        switch (response.StatusCode)
-        {
-            case System.Net.HttpStatusCode.BadRequest:
-                throw new EcoApiException(await response.Content.ReadAsStringAsync());
-            case System.Net.HttpStatusCode.OK:
-                var jsonResponse = await response.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<EcoGnomeShoppingList>(jsonResponse) ?? new EcoGnomeShoppingList("", [], []);
-            default:
-                throw new Exception(await response.Content.ReadAsStringAsync());
-        }
+        try { return JsonConvert.DeserializeObject<MessageResponse>(body)?.Message is { Length: > 0 } message ? message : null; }
+        catch (JsonException) { return null; }
     }
 }
 
-public class EcoGnomeCategory(string name, OfferType offerType, List<EcoGnomeItem> items)
+public enum LinkKind { User, Server }
+
+public class MessageResponse  { [JsonProperty("message")] public string? Message { get; set; } }
+public class LinkStart        { [JsonProperty("code")] public string Code { get; set; } = ""; [JsonProperty("path")] public string Path { get; set; } = ""; [JsonProperty("pollToken")] public string PollToken { get; set; } = ""; [JsonProperty("expiresInSeconds")] public int ExpiresInSeconds { get; set; } }
+public class LinkStatus       { [JsonProperty("status")] public string Status { get; set; } = ""; [JsonProperty("token")] public string? Token { get; set; } [JsonProperty("serverName")] public string? ServerName { get; set; } [JsonProperty("accountName")] public string? AccountName { get; set; } }
+public class BuyPricesResult  { [JsonProperty("applied")] public int Applied { get; set; } [JsonProperty("ignored")] public List<string> Ignored { get; set; } = []; }
+public class ServerStatus     { [JsonProperty("serverName")] public string ServerName { get; set; } = ""; [JsonProperty("dataHash")] public string? DataHash { get; set; } }
+public class UploadResult     { [JsonProperty("status")] public string Status { get; set; } = ""; [JsonProperty("message")] public string Message { get; set; } = ""; }
+public class ServerEndpointResult { [JsonProperty("webUrl")] public string WebUrl { get; set; } = ""; }
+public class EcoGnomeMe       { [JsonProperty("pseudo")] public string Pseudo { get; set; } = ""; [JsonProperty("serverName")] public string ServerName { get; set; } = ""; [JsonProperty("contexts")] public List<string> Contexts { get; set; } = []; }
+
+public class EcoGnomeCategory
 {
-    [JsonProperty(nameof(Name))]
-    public string Name { get; set; } = name;
-
-    [JsonProperty(nameof(OfferType))]
-    public OfferType OfferType { get; set; } = offerType;
-
-    [JsonProperty(nameof(Items))]
-    public List<EcoGnomeItem> Items { get; set; } = items;
+    [JsonProperty("name")]      public string Name { get; set; } = "";
+    [JsonProperty("offerType")] public OfferType OfferType { get; set; }
+    [JsonProperty("items")]     public List<EcoGnomeItem> Items { get; set; } = [];
 }
 
-public class EcoGnomeItem(string name, decimal price, int minDurability = -1, int maxDurability = -1, int minIntegrity = -1, int maxIntegrity = -1)
+public class EcoGnomeItem
 {
-    [JsonProperty(nameof(Name))]
-    public string Name { get; set; } = name;
+    [JsonProperty("name")] public string Name { get; set; } = "";
 
-    [JsonProperty(nameof(Price))]
-    public decimal Price { get; set; } = price;
+    //Null when Eco Gnome tracks the item without a price: the store offer is left unpriced (not tradable) instead of getting a made-up number.
+    [JsonProperty("price")] public decimal? Price { get; set; }
 
-    [JsonProperty(nameof(MinDurability))]
-    public int MinDurability { get; set; } = minDurability;
-
-    [JsonProperty(nameof(MaxDurability))]
-    public int MaxDurability { get; set; } = maxDurability;
-
-    [JsonProperty(nameof(MinIntegrity))]
-    public int MinIntegrity { get; set; } = minIntegrity;
-
-    [JsonProperty(nameof(MaxIntegrity))]
-    public int MaxIntegrity { get; set; } = maxIntegrity;
+    [JsonProperty("minDurability")] public int MinDurability { get; set; } = -1;
+    [JsonProperty("maxDurability")] public int MaxDurability { get; set; } = -1;
+    [JsonProperty("minIntegrity")]  public int MinIntegrity  { get; set; } = -1;
+    [JsonProperty("maxIntegrity")]  public int MaxIntegrity  { get; set; } = -1;
 
     [JsonIgnore] public bool IsTag => Item.GetType(this.Name) is null && TagManager.Tag(this.Name) is not null;
 }
@@ -171,3 +154,6 @@ public class EcoGnomeShoppingItem(string name, bool isTag, int quantity)
 }
 
 public class EcoApiException(string message) : Exception(message);
+
+//The token was refused: the server or the player was disconnected on the Eco Gnome side.
+public class EcoGnomeNotLinkedException(string message) : EcoApiException(message);

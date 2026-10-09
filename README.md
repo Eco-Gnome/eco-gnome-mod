@@ -2,58 +2,53 @@
 
 ## Optional server mod of [Eco Gnome](https://eco-gnome.com)
 
-This repository contains the Data Extractor part of [Eco Gnome](https://eco-gnome.com).
-It allows to extract your specific server configuration (skills, recipes, items, ...) to visualize and calculate their prices on the [Eco Gnome](https://eco-gnome.com) website.
-The extracted file is created in your server root folder: `eco_gnome_data.json`.
+This mod connects an Eco server to [Eco Gnome](https://eco-gnome.com), the price calculator. There is no chat command: everything is done from the **Eco Gnome** tab of the stores (`StoreObject`, `WoodShopCartObject`), and confirmed in the browser.
 
-It also lets users synchronize prices between their Eco shops and Eco Gnome, either through chat commands or directly from the in-game Store UI, and carry their Eco Gnome shopping lists in game.
+- The server sends its configuration (skills, recipes, items, ...) to Eco Gnome by itself at each start, only when it changed. The same data is still written to `eco_gnome_data.json` in the server root folder for a manual upload.
+- Eco Gnome reads the average prices of the server's market (store offers and recent sales) from the server's web server, through a route this mod adds (`GET /api/ecognome/v1/market`, signed requests only). It suggests them next to the buy prices players type.
+- Store owners update their prices and offers from Eco Gnome, and send their store buy prices to Eco Gnome.
+- Players carry their Eco Gnome shopping lists in game and buy them in one go.
 
-## Chat commands
+Requires the Eco 14.2 client: the tab uses the button grids (`ButtonGrid` in label mode).
 
-### Setup
+## Eco Gnome tab
 
-- `/EcoGnome registerserver {JoinCode}` _(admin, alias `egserver`)_ — Register the server on Eco Gnome. To be launched once during server setup.
-- `/EcoGnome registeruser {SecretId}` _(alias `eguser`)_ — Register your Eco Gnome account on this server. To be launched once per user.
-- `/EcoGnome export` _(admin)_ — Re-export the server data to `eco_gnome_data.json`. The export also runs automatically on server start.
+Each player only sees what they can use.
 
-### Open Eco Gnome
+**Server not registered yet**
+- Admins see **Register this server on Eco Gnome**. A page opens in the browser: create an Eco Gnome server or pick one you run, then confirm.
+- Other players read who to ask: an admin registers it from this tab.
 
-- `/EcoGnome open` _(alias `egopen`)_ — Open the Eco Gnome website in your default browser. If the server is registered and you have joined it, you will be switched to this server.
-- `/EcoGnome join` _(alias `egjoin`)_ — Open Eco Gnome and join this server (if it has been registered).
+**Account not connected** — **Connect to Eco Gnome**: a page opens in the browser, confirm, and the account joins the Eco Gnome server by itself. No code or key to copy.
 
-### For-sale objects bulk sync
+**Connected, customer** — the shopping list buttons: **Get a shopping list** and **Buy my shopping list** (greyed out while you carry no list with lines left to buy).
 
-- `/EcoGnome syncroom {ContextName}` _(alias `egsyncroom`)_ — Update the price of every authorized for-sale world object in the room you are standing in, using your Eco Gnome prices. `ContextName` is optional; leave it blank to use the default context.
-- `/EcoGnome syncdeed {ContextName}` _(alias `egsyncdeed`)_ — Same as `syncroom`, but applied to every authorized for-sale object on the deed you are standing on.
+**Connected, store owner**
+- The status line: the Eco Gnome account and the context the buttons use.
+- **Prices**
+  - **Update prices from Eco Gnome** — updates the prices of the offers already in the store. Does not add or remove offers. An item Eco Gnome tracks without a price leaves its offer unpriced (not tradable); the result popup lists them.
+  - **Rebuild offers from Eco Gnome** — adds the items you buy and sell, updates prices, removes offers Eco Gnome no longer tracks. Shows what will be added and removed first, and asks to confirm. New offers start unpriced (Eco 14.2+) until Eco Gnome gives them a price.
+  - **Send buy prices to Eco Gnome** — the prices of the store's buy offers become the prices you pay for your ingredients in Eco Gnome. Sell prices are never sent: Eco Gnome calculates them.
+- **Shopping list** — the same buttons as customers.
+- **Settings**
+  - **Context: ...** — picks which of your Eco Gnome contexts this store uses (one per store).
+  - **Open Eco Gnome** — opens the website on this server.
+  - **Disconnect** — removes your connection from this server.
+- **Advanced settings** — shows:
+  - **Offers synced** — `All`, `Buy` only or `Sell` only.
+  - **Sync tag offers** — `No` leaves tag offers untouched.
+  - **Group categories by** / **Only these skills** — how **Rebuild offers** groups and filters the categories it creates.
+  - **For-sale radius** / **Reprice my for-sale objects** — updates the price of every for-sale object you own around the store.
 
-### Shopping lists
+Categories whose name contains `[NS]` are never touched. **Shift + Right-click** on a store runs **Update prices from Eco Gnome**.
 
-- `/EcoGnome shoppinglist {Name}` _(alias `egliste`)_ — Get one of your Eco Gnome shopping lists as a paper in your inventory. Without a name, lists your shopping lists. If you already carry that list, it is updated instead. See [Shopping lists](#shopping-lists).
-
-> Shop sync commands (`syncshop`, `createshop`, ...) have been replaced by the in-game **Eco Gnome** component on stores — see below.
-
-## In-game Eco Gnome component
-
-Stores (`StoreObject`, `WoodShopCartObject`) now expose an **Eco Gnome** tab with the following options and buttons:
-
-- **Context Name** — Name of the Eco Gnome context to pull prices from. Leave empty to use the default context.
-- **Scope** — Which side of the offers the buttons act on: `All` (buys + sells), `Buy` only, or `Sell` only.
-- **Sync Tags** — When set to `Yes`, tag-based offers are also created/updated. Set to `No` to leave existing tag offers untouched.
-- **Sync Prices** _(button)_ — Update the prices of offers already present in the store from your Eco Gnome prices. Does not add or remove offers. Honors **Scope** and **Sync Tags**.
-- **Group By** — How offers are grouped into categories when new ones are created by **Sync Offers** (`None`, `Margin`, `Skill`).
-- **Filter Skills** — Restrict **Sync Offers** to items tied to these skills. Leave empty to include every skill.
-- **Sync Offers** _(button)_ — Full sync: adds missing items/tags, updates prices of existing ones, and removes offers no longer tracked in Eco Gnome. Honors **Scope** and **Sync Tags**.
-- **For Sale Sync Radius** — Radius (in blocks) used by the **Sync For Sale Area** button to find for-sale objects around the store.
-- **Sync For Sale Area** _(button)_ — Update the prices of every for-sale world object around this store (within the configured radius) from your Eco Gnome prices.
-- **Get a shopping list** _(button)_ — Pick one of your Eco Gnome shopping lists and get its paper in your inventory (same as `/egliste`).
-- **Buy my shopping list** _(button)_ — Buy in one go what this store sells of a shopping list you carry: pick the list and the bank account (when there are several), check the recap, confirm. See [Shopping lists](#shopping-lists).
-
-A shortcut interaction is also available: **Shift + Right-click** on a store triggers **Sync Prices with Eco Gnome** using the component's current settings.
+Connection tokens are kept in `Storage/EcoGnome.tokens.json` on the server; a link removed on the website brings the matching button back.
 
 ## Shopping lists
 
 A shopping list from Eco Gnome becomes a **Shopping List** paper in your inventory, one paper per list. It holds the "Items to buy" of the list, with a progress per line (`250 / 500`).
 
+- **Get a shopping list** in the Eco Gnome tab of a store gives the paper (or updates the one you carry).
 - **Right-click** the paper in your inventory to open it: progress per line, the items a tag line accepts, a **Done** checkbox per line, **Reset purchases** (to buy the same list again, e.g. every day) and **Reload from Eco Gnome** (fetches the list again and keeps what was already bought).
 - **Store purchases are counted** for whoever carries the paper. A line is ticked automatically once its quantity is reached. When an item is on several carried lists, the oldest list is filled first.
 - **Selected in the toolbar**, the paper shows its lines in the bottom-right corner. Hovering an item (in a store too) shows how many each carried list still needs.
@@ -66,14 +61,19 @@ Known limits:
 
 ## Configuration
 
-The plugin creates a config file `Configs/EcoGnome.eco` with:
+The plugin creates `Configs/EcoGnome.eco`:
 
-- `EcoGnomeUrl` — Default `https://eco-gnome.com`. URL used to talk to the Eco Gnome API.
-- `EcoGnomeUrlReverseProxy` — Optional. When set, this URL is used for the user-facing links opened by `/EcoGnome open` and `/EcoGnome join` (useful when Eco Gnome is hosted behind a reverse proxy).
+- `EcoGnomeUrl` — Default `https://eco-gnome.com`. URL of the Eco Gnome API.
+- `EcoGnomeUrlReverseProxy` — Optional. Used for the pages opened in the players' browser (when Eco Gnome is behind a reverse proxy).
+- `AutoUploadData` — Default `true`. Send the server data at start when it changed.
+- `ShareMarketPrices` — Default `true`. Let Eco Gnome read the market average prices. Requests are signed (HMAC) with a secret only this server and Eco Gnome know, kept in `Storage/EcoGnome.tokens.json`.
+- `MarketPublicUrl` — Optional. Address Eco Gnome uses to reach the web server (e.g. behind a reverse proxy). Empty: the network config's `WebServerUrl`, else the server's public IP and `WebServerPort`. The web server port must be reachable from the internet; Eco Gnome's Server Management page shows whether it is, and lets an admin set another address.
+- `MarketWindowDays` — Default `7`. Days of sales the traded average covers.
+- `MarketCurrency` — Empty by default: the currency that moved the most money.
 
 ## Installation
 
-Download the latest `EcoGnomeMod.dll` and `StoreObject.cs` from the [Releases page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) and drop them in `Mods/UserCode` in your server.
+Download the latest `EcoGnomeMod.dll` and `StoreObject.cs` from the [Releases page](https://github.com/Eco-Gnome/eco-gnome-mod/releases) and drop them in `Mods/UserCode` in your server. Both files must come from the same release.
 
 For the French texts, also copy `Translations/EcoGnome.csv` to `Mods/Translations` in your server.
 

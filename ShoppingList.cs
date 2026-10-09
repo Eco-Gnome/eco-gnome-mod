@@ -131,9 +131,15 @@ public class ShoppingListData : IController, INotifyPropertyChanged, IRPCAuthChe
     [Autogen, RPC, UITypeName("BigButton"), DynamicTitle(nameof(ReloadTitle))]
     public void ReloadFromEcoGnome(Player player) => Task.Run(async () =>
     {
+        if (EcoGnomeTokens.UserToken(player.User) is not { } token)
+        {
+            player.Msg(ShoppingLists.Translated(Localizer.DoStr("Connect to Eco Gnome first: Connect to Eco Gnome button in the Eco Gnome tab of a store.")));
+            return;
+        }
+
         try
         {
-            var list = await EcoGnomeApi.GetShoppingListAsync(NetworkManager.ServerID.ToString(), player.User.Id.ToString(), this.Name);
+            var list = await EcoGnomeApi.GetShoppingListAsync(token, this.Name);
             this.Update(list.Items);
             ShoppingListDisplay.Refresh(player.User);
         }

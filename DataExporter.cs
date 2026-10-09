@@ -21,7 +21,8 @@ namespace EcoGnomeMod;
 
 public static class DataExporter
 {
-    public static void ExportAll()
+    /// <summary>Writes eco_gnome_data.json (indented, for a manual upload) and returns the same data as compact JSON for the automatic upload, or null on failure.</summary>
+    public static string? ExportAll()
     {
         try
         {
@@ -54,51 +55,17 @@ public static class DataExporter
             );
 
             File.WriteAllText("eco_gnome_data.json", JsonConvert.SerializeObject(data, options));
+
+            options.Formatting = Formatting.None;
+            return JsonConvert.SerializeObject(data, options);
         }
         catch (Exception e)
         {
             File.WriteAllText("eco_gnome_error.txt", e.ToString());
 
             Console.WriteLine(e);
+            return null;
         }
-    }
-
-    public static readonly HashSet<BonusAction> RelevantActions = [BonusAction.ResourceCost, BonusAction.LaborCost, BonusAction.CraftTime, BonusAction.Yield];
-
-    public static List<(string TalentName, BonusAction Action)> FindMatchingCraftTalents(RecipeFamily recipeFamily, Recipe recipe, List<TalentVariant> talentVariants)
-    {
-        var results = new List<(string, BonusAction)>();
-        var recipeSkillTypes = recipeFamily.RequiredSkills?.Select(s => s.SkillType).ToHashSet() ?? [];
-        var recipeType = recipeFamily.GetType();
-        var tableTypes = CraftingComponent.TablesForRecipe(recipeType)?.ToHashSet() ?? [];
-        var productTags = recipe.Products
-            .Where(p => p?.Item != null)
-            .SelectMany(p => p.Item.Tags())
-            .Select(t => t.Name)
-            .ToHashSet();
-
-        foreach (var variant in talentVariants)
-        {
-            if (variant.Talent.Base) continue;
-            foreach (var (craftCause, _) in variant.Entries)
-            {
-                if (craftCause == null) continue;
-
-                if (craftCause.SkillTypes.Count > 0 && !craftCause.SkillTypes.Any(st => recipeSkillTypes.Contains(st)))
-                    continue;
-                if (craftCause.ExcludedSkillTypes.Count > 0 && craftCause.ExcludedSkillTypes.Any(st => recipeSkillTypes.Contains(st)))
-                    continue;
-                if (craftCause.Recipes.Count > 0 && !craftCause.Recipes.Contains(recipeType))
-                    continue;
-                if (craftCause.CraftStationTypes.Count > 0 && !craftCause.CraftStationTypes.Any(ct => tableTypes.Any(tt => ct.IsAssignableFrom(tt))))
-                    continue;
-                if (craftCause.ItemTags.Count > 0 && !craftCause.ItemTags.Any(it => productTags.Contains(it)))
-                    continue;
-
-                results.Add((variant.Name, craftCause.Action));
-            }
-        }
-        return results;
     }
 
     public static Dictionary<string, string> GenerateLocalization(string name)
@@ -220,7 +187,7 @@ public class RecipeExported
         // Routing is per-action (the runtime filter on ItemTags applies at recipe scope, see CraftBonusCause.IsTriggered):
         //   ResourceCost → non-static ingredients, Yield → all products, LaborCost → labor, CraftTime → craft minutes.
         // Static (ConstantValue) ingredients skip ResourceCost like WorkOrder.CurrentNeededTags does; products/labor/time are not gated in-game.
-        var matchingTalents = DataExporter.FindMatchingCraftTalents(recipeFamily, recipe, talentVariants);
+        var matchingTalents = TalentVariant.MatchingFor(recipeFamily, recipe, talentVariants);
         foreach (var ing in this.Ingredients.Where(i => !i.Quantity.IsConstant))
             ing.Quantity.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.ResourceCost).Select(m => m.TalentName));
         this.Labor.InjectTalentModifiersIfMissing(matchingTalents.Where(m => m.Action == BonusAction.LaborCost).Select(m => m.TalentName));
@@ -587,120 +554,6 @@ public class TalentExported
 
         this.Bonuses = variant.Entries.Select(entry => entry.Bonus).ToList();
     }
-}
-
-[JsonObject(MemberSerialization.OptIn)]
-public class BonusExported
-{
-    [JsonProperty] public required string Action { get; set; }      //BonusAction (ResourceCost, LaborCost, CraftTime, Yield).
-    [JsonProperty] public required string EffectType { get; set; }  //Multiplicative, CappedMultiplicative, Additive, AdditivePercent, Override, Chance, TieredMultiplicative.
-    [JsonProperty] public float Value { get; set; }
-    [JsonProperty] public float? Cap { get; set; }                  //CappedMultiplicative only: the value can't reduce below base × Cap.
-    [JsonProperty] public float? Chance { get; set; }               //Chance only: probability of adding Value on each craft.
-    [JsonProperty] public float[]? Levels { get; set; }             //TieredMultiplicative only: multiplier per talent level (index 0 = level 1); reuse the last entry past the end.
-    [JsonProperty] public string[]? SkillTypes { get; set; }         //Filter: recipe's required skill must be one of these. Null = no filter.
-    [JsonProperty] public string[]? ExcludedSkillTypes { get; set; } //Filter: recipes requiring one of these skills are excluded. Null = no exclusion.
-    [JsonProperty] public string[]? ItemTags { get; set; }           //Recipe-scope filter: any product carrying one of these tags triggers the bonus. Null = no tag filter.
-    [JsonProperty] public string[]? Recipes { get; set; }            //Filter: only these recipes trigger the bonus, named as in Recipes[].Name. Null = no recipe filter.
-
-    public static IEnumerable<BonusExported> FromBonus(Bonus bonus) => FromBonusWithCause(bonus).Select(entry => entry.Bonus);
-
-    /// <summary>Flattens a Bonus into one entry per (craft cause, effect) pair, each with the cause it came from. Non-craft causes and effects that can't map to a flat price formula are skipped.</summary>
-    public static IEnumerable<(CraftBonusCause? Cause, BonusExported Bonus)> FromBonusWithCause(Bonus bonus)
-    {
-        foreach (var cause in bonus.Causes)
-        {
-            var (action, craftCause) = cause switch
-            {
-                CraftBonusCause craft => (craft.Action, craft),
-                ActionCause simple    => (simple.Action, null),
-                _                     => (BonusAction.None, (CraftBonusCause?)null),
-            };
-            if (!DataExporter.RelevantActions.Contains(action)) continue;
-
-            foreach (var effect in bonus.Effects)
-                if (From(action, craftCause, effect) is { } exported) yield return (craftCause, exported);
-        }
-    }
-
-    static BonusExported? From(BonusAction action, CraftBonusCause? cause, BonusEffect effect)
-    {
-        var data = effect switch
-        {
-            BonusEffectCappedMultiplicative capped => ("CappedMultiplicative", capped.Value,    (float?)capped.Cap, (float?)null, (float[]?)null),
-            BonusEffectMultiplicative mult         => ("Multiplicative",       mult.Value,      (float?)null,       (float?)null, (float[]?)null),
-            BonusEffectAdditive additive           => ("Additive",             additive.Value,  (float?)null,       (float?)null, (float[]?)null),
-            BonusEffectAdditivePercent percent     => ("AdditivePercent",      percent.Percent, (float?)null,       (float?)null, (float[]?)null),
-            BonusEffectOverride ovr                => ("Override",             ovr.Value,       (float?)null,       (float?)null, (float[]?)null),
-            BonusEffectChance chanceEffect         => ("Chance",               chanceEffect.SuccessValue, (float?)null, (float?)chanceEffect.Chance, (float[]?)null),
-            _                                      => SampleUnknownEffect(action, effect),
-        };
-        if (data.Item1 == null) return null;
-
-        return new BonusExported
-        {
-            Action             = action.ToString(),
-            EffectType         = data.Item1,
-            Value              = data.Item2,
-            Cap                = data.Item3,
-            Chance             = data.Item4,
-            Levels             = data.Item5,
-            SkillTypes         = ToSkillNames(cause?.SkillTypes),
-            ExcludedSkillTypes = ToSkillNames(cause?.ExcludedSkillTypes),
-            ItemTags           = cause?.ItemTags.Count > 0 ? cause.ItemTags.ToArray() : null,
-            Recipes            = ToRecipeNames(cause?.Recipes),
-        };
-    }
-
-    //CraftBonusCause.Recipes holds RecipeFamily types; resolve them to the names used by RecipeExported so a consumer can match a recipe directly.
-    //A family that isn't registered (mod not loaded) keeps its type name: no exported recipe carries it, so the bonus applies to nothing, which is correct.
-    static string[]? ToRecipeNames(HashSet<Type>? types) => types is { Count: > 0 }
-        ? types.SelectMany(type => RecipeManager.ContainsRecipeFamily(type)
-                ? RecipeManager.GetRecipeFamily(type).Recipes.Select(recipe => RecipeExported.NameOf(RecipeManager.GetRecipeFamily(type), recipe))
-                : [type.Name])
-            .Distinct().ToArray()
-        : null;
-
-    const int MaxSampledLevels = 10;
-
-    //Effect classes added by other mods (e.g. BeEco's BonusEffectTieredMultiplicative) can't be referenced at compile time.
-    //Sample TransformValue on synthetic contexts to recover their math; only deterministic, purely multiplicative effects
-    //are exportable this way — anything else (chance-based, additive-pooling, context-dependent) is skipped as before.
-    static (string?, float, float?, float?, float[]?) SampleUnknownEffect(BonusAction action, BonusEffect effect)
-    {
-        var none = ((string?)null, 0f, (float?)null, (float?)null, (float[]?)null);
-        try
-        {
-            var levels = new List<float>();
-            for (var level = 1; level <= MaxSampledLevels; level++)
-            {
-                float atOne, atTwo, repeat;
-                try
-                {
-                    atOne  = Sample(action, effect, level, 1f);
-                    atTwo  = Sample(action, effect, level, 2f);
-                    repeat = Sample(action, effect, level, 1f);
-                }
-                catch when (levels.Count > 0) { break; } //Tiered tables may not define this many levels; keep what we have.
-                if (atOne != repeat) return none;                                                //Nondeterministic (chance-based).
-                if (Math.Abs(atTwo - (2f * atOne)) > 0.0001f * Math.Max(1f, Math.Abs(atTwo))) return none; //Not purely multiplicative.
-                levels.Add(atOne);
-            }
-
-            if (levels.All(l => l == 1f)) return none; //No-op at every level: nothing to export (e.g. pooling effects that only mutate context).
-            while (levels.Count > 1 && levels[^1] == levels[^2]) levels.RemoveAt(levels.Count - 1); //Trim the clamped tail; consumers reuse the last entry.
-
-            return levels.Count == 1
-                ? ("Multiplicative",       levels[0], (float?)null, (float?)null, (float[]?)null)
-                : ("TieredMultiplicative", levels[0], (float?)null, (float?)null, levels.ToArray());
-        }
-        catch { return none; }
-    }
-
-    static float Sample(BonusAction action, BonusEffect effect, int level, float baseValue)
-        => effect.TransformValue(new BonusContext { Action = action, SourceLevel = level }, baseValue);
-
-    static string[]? ToSkillNames(HashSet<Type>? skillTypes) => skillTypes?.Count > 0 ? skillTypes.Select(t => Item.Get(t)?.Name ?? t.Name).ToArray() : null;
 }
 
 public class DynamicTypeWriteOnlyConverter : JsonConverter

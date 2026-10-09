@@ -8,6 +8,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <!-- The market route is an ASP.NET controller: Eco's web server picks up controllers from the mod DLLs. -->
+      <FrameworkReference Include="Microsoft.AspNetCore.App" />
       <ProjectReference Include="..\..\Eco.Core\Eco.Core.csproj" />
       <ProjectReference Include="..\..\Eco.Gameplay\Eco.Gameplay.csproj" />
       <ProjectReference Include="..\..\Eco.Mods\Eco.Mods.csproj" />

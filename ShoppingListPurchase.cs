@@ -7,6 +7,7 @@ using Eco.Gameplay.Objects;
 using Eco.Gameplay.Players;
 using Eco.Gameplay.Systems.TextLinks;
 using Eco.Gameplay.UI;
+using Eco.Mods.TechTree;
 using Eco.Shared.Items;
 using Eco.Shared.Localization;
 using Eco.Shared.Networking;
@@ -30,7 +31,7 @@ public static class ShoppingListPurchase
         {
             var reason = only is null ? Localizer.DoStr("Carry a shopping list with lines left to buy first (Get a shopping list button).")
                                       : Localizer.Do($"{only.Name}: nothing left to buy.");
-            player.Msg(ShoppingLists.Translated(reason));
+            player.InfoBox(ShoppingLists.Translated(reason)); //A popup, not a chat line: the store window is open over the chat.
             return;
         }
 
@@ -38,7 +39,7 @@ public static class ShoppingListPurchase
         if (list is null) return;
 
         var currency = store.Currency;
-        if (currency is null) { player.Msg(ShoppingLists.Translated(Localizer.DoStr("This store has no currency set."))); return; }
+        if (currency is null) { player.InfoBox(ShoppingLists.Translated(Localizer.DoStr("This store has no currency set."))); return; }
 
         var (plan, missing) = Plan(list, store);
         // Lines this store only sells through a tag offer that may deliver other items: left to the player.
@@ -50,13 +51,13 @@ public static class ShoppingListPurchase
             var reason = manual.Count == 0  ? Localizer.DoStr("This store sells nothing still needed on this list.")
                        : missing.Count == 0 ? ManualLine(manual)
                        :                      Localizer.NotLocalizedStr($"{MissingLine(missing)} {ManualLine(manual)}");
-            player.Msg(ShoppingLists.Translated(Localizer.Do($"{list.Name}: {reason}")));
+            player.InfoBox(ShoppingLists.Translated(Localizer.Do($"{list.Name}: {reason}")));
             return;
         }
 
         var accounts = Registrars.All<BankAccount>().Where(a => a.CanAccess(user, AccountAccess.Use, false) && a.GetCurrencyHoldingVal(currency) > 0)
                                                     .OrderByDescending(a => a is PersonalBankAccount).ToList();
-        if (accounts.Count == 0) { player.Msg(ShoppingLists.Translated(Localizer.Do($"None of your bank accounts holds {currency.UILink()}."))); return; }
+        if (accounts.Count == 0) { player.InfoBox(ShoppingLists.Translated(Localizer.Do($"None of your bank accounts holds {currency.UILink()}."))); return; }
 
         var account = accounts.Count == 1 ? accounts[0] : await Pick(player, Localizer.DoStr("Pay with which bank account?"), accounts.Select(a => a.Name).ToList()) is { } j ? accounts[j] : null;
         if (account is null) return;
@@ -64,7 +65,7 @@ public static class ShoppingListPurchase
         // The store may hold less than its offers show (offers sharing the same stock, storage rules): buy what goes through.
         var check = store.DoPerformTrade(user, TradeData(plan), account, dryRun: true);
         if (!check.Success) plan = Shrink(store, user, account, plan);
-        if (plan.Count == 0) { player.Msg(ShoppingLists.Translated(Localizer.Do($"{list.Name}: {check.Message}"))); return; }
+        if (plan.Count == 0) { player.InfoBox(ShoppingLists.Translated(Localizer.Do($"{list.Name}: {check.Message}"))); return; }
         missing = list.Entries.Where(e => !e.IsComplete && plan.Where(p => p.Entry == e).Sum(p => p.Amount) < e.Target - e.Bought).Except(manual.Select(m => m.Entry)).ToList();
 
         var partial = check.Success ? LocString.Empty : check.Message;
@@ -72,7 +73,8 @@ public static class ShoppingListPurchase
         if (confirm != 0) return;
 
         var result = store.DoPerformTrade(user, TradeData(plan), account);
-        if (!result.Success) player.Msg(ShoppingLists.Translated(Localizer.Do($"{list.Name}: {result.Message}")));
+        if (!result.Success) player.InfoBox(ShoppingLists.Translated(Localizer.Do($"{list.Name}: {result.Message}")));
+        else EcoGnomeComponent.RefreshShoppingState(); //A list bought to the end greys Buy my shopping list out.
     }
 
     // What to buy from which offer: the cheapest offers first, never more than what's left to buy or what's on the shelf.
